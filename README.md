@@ -10,7 +10,7 @@ https://twitter.com/oRLF6nXrMai7KiK
 
 コンポジット映像端子と、PS２キーボードがあれば、ichigodyhookがなくても使えると思います。
 
-ESP-WROOM-32 (D1 Mini)で動くようにplatformIOでチューニングしていますが、ピンアサインさえ合わせれば大体どのようなesp32でも動くと思います。
+ESP-WROOM-32 (D1 Mini)で動くようにplatformIOでチューニングしていますが、ピンアサインさえ合わせれば大体どのようなesp32,M5Stackなどでも動くと思います。
 
 R5,R6は4.7kオーム
 R7,R8は120オームです
