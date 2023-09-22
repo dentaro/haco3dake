@@ -2,6 +2,7 @@
 haco3 on ichigo dyhook
 
 esp32で動き、lua5.3でプログラミングできる開発環境Haco3を、ichigodyhookで動かすためにhaco3dakeを作っています。
+エディタはkiloを改造したものです。
 
 https://twitter.com/oRLF6nXrMai7KiK
 
