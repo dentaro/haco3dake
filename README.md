@@ -1,7 +1,7 @@
 # haco3dake
 haco3 on ichigo dyhook
 
-esp32で動き、lua5.3でプログラミングできる開発環境Haco3をichigodyhookで動かせるdakeを作っています。
+esp32で動き、lua5.3でプログラミングできる開発環境Haco3を、ichigodyhookで動かすためにhaco3dakeを作っています。
 
 https://twitter.com/oRLF6nXrMai7KiK
 
