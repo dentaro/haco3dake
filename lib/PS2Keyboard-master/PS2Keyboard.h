@@ -43,8 +43,8 @@
 #define PS2_ESC				27
 #define PS2_INSERT			0
 #define PS2_DELETE			127
-#define PS2_HOME			0
-#define PS2_END				0
+#define PS2_HOME			36
+#define PS2_END				35
 #define PS2_PAGEUP			25
 #define PS2_PAGEDOWN			26
 #define PS2_UPARROW			11
