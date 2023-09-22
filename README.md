@@ -7,7 +7,7 @@ https://twitter.com/oRLF6nXrMai7KiK
 
 基板も作って頒布する予定ですが、回路は結構簡単なのですぐに自作できると思います。
 
-ESP-WROOM-32 (D1 Mini)で動くようにplatformIOでチューニングしていますが、ピンアサインが合えば大体どのようなesp32で動くと思います。
+ESP-WROOM-32 (D1 Mini)で動くようにplatformIOでチューニングしていますが、ピンアサインが合えば大体どのようなesp32でも動くと思います。
 
 R5,R6は4.7kオーム
 R7,R8は120オームです
