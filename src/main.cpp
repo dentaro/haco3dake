@@ -900,8 +900,8 @@ void setup()
     // sinValues[90] = 1.0;
     // sinValues[270] = -1.0;
 
-if(firstBootF == true)
-{
+// if(firstBootF == true)
+// {
   sprite88_0.setPsram(false );
   sprite88_0.setColorDepth(16);//子スプライトの色深度
   sprite88_0.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
@@ -948,6 +948,9 @@ if(firstBootF == true)
   spriteMap.setPsram(false );
   spriteMap.setColorDepth(16);//子スプライトの色深度
   spriteMap.createSprite(MAPWH, MAPWH/divnum);//マップ展開用スプライトメモリ確保
+
+  if(firstBootF == true)
+{
 
   //タッチボタンを生成
   File fr = SPIFFS.open("/init/param/uiinfo.txt", "r");
