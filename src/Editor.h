@@ -15,6 +15,10 @@ class Editor {
 
   private:
   String statusMessage = "";
+  // int preCx =4;
+  // int preCy =4;
+  // int preRx =4;
+
   int keyMillis = 0;
   int keywaitTime = 200;
   
@@ -54,10 +58,10 @@ class Editor {
     int preRx;
     int rowoff;
     int coloff;
-    int screenrows;
     int screencols;
-    int screenrow;
+    int screenrows;
     int screencol;
+    int screenrow;
     int dirty;
     int numrows;
     erow *row;
@@ -116,8 +120,8 @@ class Editor {
     int getPreRx();
 
 
-    int getScreenRow();
     int getScreenCol();
+    int getScreenRow();
 
     // void editorPageMove(int c, KbdRptParser &Prs);
     void editorPageMove(char c, KbdRptParser &Prs);
@@ -128,6 +132,12 @@ class Editor {
     void update(LovyanGFX& tft, fs::FS &fs, char _keychar);
     void writeFile(fs::FS &fs, const char * path, const char * message);
     void appendFile(fs::FS &fs, const char * path, const char * message);
+
+    void getCursorConfig(String _wrfile);
+    void setCursorConfig();
+    void setCursorConfig(int _cx, int _cy, int _rx);
+
+    void setCursor(int _cx,int _cy,int _rx);
 };
 
 #endif

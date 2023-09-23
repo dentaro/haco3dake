@@ -35,6 +35,10 @@ extern std::deque<int> buttonState;//ボタンの個数未定
 extern void restart(String _fileName, int _isEditMode);
 
 extern char keychar;
+extern Editor editor;
+
+extern String savedAppfileName;
+extern bool difffileF;//前と違うファイルを開こうとしたときに立つフラグ
 
 // extern void getOpenConfig(String _wrfile);
 
@@ -956,14 +960,20 @@ int RunLuaGame::l_appmode(lua_State* L){//ファイル名を取得して、そ�
   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   const char* file = lua_tostring(L, 1);
   const int modeno = lua_tointeger(L, 2);
-  appfileName = file;//開くファイルを更新しておく
+
+  Serial.print(file);
+  Serial.print("][");
+  Serial.println(savedAppfileName);
+
+  if(savedAppfileName != file){//違うゲームファイルを開こうとしていたら
+    // editor.setCursor(0,0,0);//カーソルの座標をリセット
+    // editor.setEditorConfig();
+    difffileF = true;
+  }
+
+  // appfileName = file;//開くファイルを更新しておく
 
   restart(file, modeno);
-
-  // setOpenConfig(file, modeno);//エディットモードで再起動
-  // delay(100);
-  // reboot();
-
   return 0;
 }
 
@@ -976,7 +986,6 @@ int RunLuaGame::l_appinfo(lua_State* L){//ファイル名を取得して、そ�
     const char *lineChar = appfileName.c_str();
     lua_pushstring(L, lineChar);//引数０の時は名前
   }
-
   return 1;
 }
 

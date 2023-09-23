@@ -8,6 +8,7 @@
 #include "SPIFFS.h"
 #include "baseGame.h"
 #include "Tunes.h"
+#include "Editor.h"
 
 #include <bitset>
 #include <iostream>

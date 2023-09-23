@@ -4,6 +4,11 @@
 extern PS2Keyboard keyboard;
 extern char keychar;
 extern bool firstBootF;
+extern bool isEditMode;
+
+extern String appfileName;//実行されるアプリ名
+extern String savedAppfileName;//ファイルに書き込みした
+extern bool difffileF;//前と違うファイルを開こうとしたときに立つフラグ
 
 Editor::Editor() {
     // コンストラクタの実装
@@ -62,68 +67,81 @@ void Editor::editorScroll() {
     E.rx = editorRowCxToRx(&E.row[E.cy], E.cx);
   }
 
-  E. screenrow = getRx() - E.coloff; // カーソルの表示位置をスクリーン座標に変換
-  E. screencol = getCy() - E.rowoff; // カーソルの表示位置をスクリーン座標に変換
-
-  if (E. screenrow < 0) {
-    E.coloff += E. screenrow; // カーソルが画面外に出た場合、coloffを調整してスクロール
-  } else if (E. screenrow >= E.screencols) {
-    E.coloff += E. screenrow - E.screencols + 1; // カーソルが画面外に出た場合、coloffを調整してスクロール
-  }
+  E. screencol = getRx() - E.coloff; // カーソルの表示位置をスクリーン座標に変換
+  E. screenrow = getCy() - E.rowoff; // カーソルの表示位置をスクリーン座標に変換
 
   if (E. screencol < 0) {
-    E.rowoff += E. screencol; // カーソルが画面外に出た場合、rowoffを調整してスクロール
+    E.coloff += E. screencol; // カーソルが画面外に出た場合、coloffを調整してスクロール
   } else if (E. screencol >= E.screenrows) {
-    E.rowoff += E. screencol - E.screenrows + 1; // カーソルが画面外に出た場合、rowoffを調整してスクロール
+    E.coloff += E. screencol - E.screenrows + 1; // カーソルが画面外に出た場合、coloffを調整してスクロール
+  }
+
+  if (E. screenrow < 0) {
+    E.rowoff += E. screenrow; // カーソルが画面外に出た場合、rowoffを調整してスクロール
+  } else if (E. screenrow >= E.screencols) {
+    E.rowoff += E. screenrow - E.screencols + 1; // カーソルが画面外に出た場合、rowoffを調整してスクロール
   }
 
 }
 
 
+int countThreeByteCharacters(const char *str) {
+    int count = 0;
+    while (*str != '\0') {
+        if ((*str & 0xE0) == 0xE0) { // 3バイト文字の先頭バイトかどうかを判定
+            count++;
+            str += 2; // 3バイト文字なので2バイト進める
+        } else {
+            str++;
+        }
+    }
+    return count;
+}
+
+
 
 void Editor::editorDrawRows(struct abuf *ab) {
-
   int y;
-  for (y = 0; y < E.screenrows; y++) {
+  for (y = 0; y < E.screencols; y++) {
     int filerow = y + E.rowoff;
-    if (filerow >= E.numrows) {
-      if (E.numrows == 0 && y == E.screenrows / 3) {
-        char welcome[80];
-        int welcomelen = snprintf(welcome, sizeof(welcome),
-          "Kilo editor -- version %s", KILO_VERSION);
-        if (welcomelen > E.screencols) welcomelen = E.screencols;
-        int padding = (E.screencols - welcomelen) / 2;
-        if (padding) {
+      if (filerow >= E.numrows) {
+        if (E.numrows == 0 && y == E.screencols / 3) {
+          char welcome[80];
+          int welcomelen = snprintf(welcome, sizeof(welcome),
+            "Kilo editor -- version %s", KILO_VERSION);
+          if (welcomelen > E.screenrows) welcomelen = E.screenrows;
+          int padding = (E.screenrows - welcomelen) / 2;
+          if (padding) {
+            abAppend(ab, "~", 1);
+            padding--;
+          }
+          while (padding--) abAppend(ab, " ", 1);
+          abAppend(ab, welcome, welcomelen);
+        } else {
           abAppend(ab, "~", 1);
-          padding--;
         }
-        while (padding--) abAppend(ab, " ", 1);
-        abAppend(ab, welcome, welcomelen);
-      } else {
-        abAppend(ab, "~", 1);
+      }  else {
+
+
+    // 行の表示位置を計算
+    int len = E.row[filerow].rsize - E.coloff;
+    if (len < 0) len = 0;
+
+    if (len >= E.screenrows + countThreeByteCharacters(&E.row[filerow].render[E.coloff])) len = E.screenrows - 1;
+
+    // バッファに追加
+    abAppend(ab, &E.row[filerow].render[E.coloff], len);
       }
-    } else {
-      // int len = E.row[filerow].rsize - E.coloff;
-      // if (len < 0) len = 0;
-      // if (len >= E.screencols) len = E.screencols - 1;
-      // // 新たに追加：3 バイト文字が途中で切れないようにするために、
-      // // len を 3 の倍数に切り上げる処理を行います。
-      // len = (len + 2) / 3 * 3;
-      // abAppend(ab, &E.row[filerow].render[E.coloff], len);
-
-
-      int len = E.row[filerow].rsize - E.coloff;
-      if (len < 0) len = 0;
-      if (len >= E.screencols) len = E.screencols - 1;
-      abAppend(ab, &E.row[filerow].render[E.coloff], len);
-    }
 
     // 新しい行が挿入された場合、それ以降の行も再描画
-    if (y < E.screenrows - 1 && filerow < E.numrows - 1) {
+    if (y < E.screencols - 1 && filerow < E.numrows - 1) {
       abAppend(ab, "\r\n", 2);
     }
+
   }
-  abAppend(ab, "\n", 1);//ダミー文字を入れる（終端子ごと後で消す）
+
+  // 最終行の終端子を追加
+  abAppend(ab, "\n", 1);
 }
 
 
@@ -460,15 +478,16 @@ void Editor::editorPageMove(char c, KbdRptParser &Prs) {
   if (c == PS2_PAGEUP&&Prs.getShiftF()) {
           E.cy = E.rowoff;
         } else if (c == PS2_PAGEDOWN&&Prs.getShiftF()) {
-          E.cy = E.rowoff + E.screenrows - 1;
+          E.cy = E.rowoff + E.screencols - 1;
           if (E.cy > E.numrows) E.cy = E.numrows;
         }
-        int times = E.screenrows;
+        int times = E.screencols;
         while (times--)
           editorMoveCursor(c == PS2_PAGEUP ? PS2_UPARROW : PS2_DOWNARROW);
 }
 // void Editor::editorProcessKeypress(int c, fs::FS &fs, fs::FS &SD) {
 void Editor::editorProcessKeypress(int c, fs::FS &fs) {
+  if(isEditMode){
   
   // c = keychar;
   if (!c) return;
@@ -517,10 +536,10 @@ void Editor::editorProcessKeypress(int c, fs::FS &fs) {
       //   if (c == PS2_PAGEUP) {
       //     E.cy = E.rowoff;
       //   } else if (c == PS2_PAGEDOWN) {
-      //     E.cy = E.rowoff + E.screenrows - 1;
+      //     E.cy = E.rowoff + E.screencols - 1;
       //     if (E.cy > E.numrows) E.cy = E.numrows;
       //   }
-      //   int times = E.screenrows;
+      //   int times = E.screencols;
       //   while (times--)
       //     editorMoveCursor(c == PS2_PAGEUP ? ARROW_UP : ARROW_DOWN);
       }
@@ -529,13 +548,16 @@ void Editor::editorProcessKeypress(int c, fs::FS &fs) {
     case PS2_DOWNARROW:
     case PS2_LEFTARROW:
     case PS2_RIGHTARROW:
+    
       editorMoveCursor(c);
+    
       break;
     default:
       editorInsertChar(c);
       editorSetStatusMessage("");
       break;
   }
+}
 }
 
 void Editor::editorSetStatusMessage(const char *fmt, ...) {
@@ -559,7 +581,7 @@ void Editor::editorDrawStatusBar(LovyanGFX& tft, struct abuf *ab) {
   // E.preCx = getCx();
   // E.preRx = getRx();
 
-  // tft.println("srow["+ String(E.screencol)+ "] row[" +String(getCy())+"]");
+  // tft.println("srow["+ String(E.screenrow)+ "] row[" +String(getCy())+"]");
 
   // tft.print("cx["+ String(E.cx)+ "] rx[" +String(E.rx)+"]");
   tft.print(statusMessage);
@@ -569,7 +591,7 @@ void Editor::editorDrawStatusBar(LovyanGFX& tft, struct abuf *ab) {
   // int codelen = int(1600/E.numrows);
   
   // int curpos = int(codeunit*getCy());
-  // int codepos = int(codeunit*(getCy() -E.screencol));
+  // int codepos = int(codeunit*(getCy() -E.screenrow));
   
   // tft.fillRect(252,0,4,160,HACO3_C5);//コードの全体の長さを表示
   // tft.fillRect(252,codepos,4,codelen,HACO3_C6);//コードの位置と範囲を表示
@@ -603,11 +625,11 @@ int Editor::getRx(){
 //   return E.preRx;
 // }
 
-int Editor::getScreenRow(){
-  return E.screenrow;
-}
 int Editor::getScreenCol(){
   return E.screencol;
+}
+int Editor::getScreenRow(){
+  return E.screenrow;
 }
 
 void Editor::editorDrawMessageBar(LovyanGFX& tft, struct abuf *ab) {
@@ -615,44 +637,72 @@ void Editor::editorDrawMessageBar(LovyanGFX& tft, struct abuf *ab) {
   tft.print(E.statusmsg);
   tft.print(E.statusmsg_time);
   // int msglen = strlen(E.statusmsg);
-  // if (msglen > E.screencols) msglen = E.screencols;
+  // if (msglen > E.screenrows) msglen = E.screenrows;
   // if (msglen && time(NULL) - E.statusmsg_time < 5)
   //   abAppend(ab, E.statusmsg, msglen);
 }
 
-void Editor::editorRefreshScreen(LovyanGFX& tft) {
+// void Editor::editorRefreshScreen(LovyanGFX& tft) {
  
-  struct abuf ab = ABUF_INIT;
-  // screen.fillScreen(TFT_DARKGREEN);
-  tft.fillScreen(HACO3_C1);
-  tft.setTextSize(1);//サイズ
-  tft.setFont(&lgfxJapanGothic_12);//日本語可,等幅
-  // tft.setTextSize(1, 1);
-  // tft.setFont(&fonts::Font0);//6*8
-  tft.setCursor(0, 1);//位置
-  tft.setTextWrap(true);
-  // screen.setTextColor(0x00FFFFU, 0x000033U);
-  tft.setTextColor( TFT_WHITE);
-  // tft.setTextColor( TFT_WHITE , TFT_BLACK );
-  tft.fillScreen(HACO3_C1);//コンソール画面をリフレッシュ
-  editorScroll();
-  editorDrawRows(&ab);
-  //終端子をダミー文字ごと消す処理
-  if (ab.len > 0) {
-    ab.len--; // バッファの長さを1つ減らす
-    ab.b[ab.len] = '\0'; // 新しい終端文字を追加
-  }
-  tft.fillRect(getScreenRow() * 6, getScreenCol() * 13, 6, 13, HACO3_C8); // カーソルを表示
+//   struct abuf ab = ABUF_INIT;
+//   // screen.fillScreen(TFT_DARKGREEN);
+//   tft.fillScreen(HACO3_C1);
+//   tft.setTextSize(1);//サイズ
+//   tft.setFont(&lgfxJapanGothic_12);//日本語可,等幅
+//   tft.setCursor(0, 1);//位置
+//   tft.setTextWrap(true);
+//   tft.setTextColor( TFT_WHITE);
+//   tft.fillScreen(HACO3_C1);//コンソール画面をリフレッシュ
+//   editorScroll();
+//   editorDrawRows(&ab);
+//   //終端子をダミー文字ごと消す処理
+//   if (ab.len > 0) {
+//     ab.len--; // バッファの長さを1つ減らす
+//     ab.b[ab.len] = '\0'; // 新しい終端文字を追加
+//   }
+//   tft.fillRect(getScreenCol() * 6, getScreenRow() * 13, 6, 13, HACO3_C8); // カーソルを表示
 
-  tft.setCursor(0, 0);
-  tft.setTextColor(HACO3_C7);
-  tft.println(ab.b);
-  editorDrawStatusBar(tft, &ab);
+//   tft.setCursor(0, 0);
+//   tft.setTextColor(HACO3_C7);
+//   tft.println(ab.b);
+//   editorDrawStatusBar(tft, &ab);
 
-  // editorDrawMessageBar(tft,&ab);
-  abFree(&ab);
+//   // editorDrawMessageBar(tft,&ab);
+//   abFree(&ab);
 
+// }
+
+void Editor::editorRefreshScreen(LovyanGFX& tft) {
+    struct abuf ab = ABUF_INIT;
+    tft.fillScreen(HACO3_C1);
+    tft.setTextSize(1);
+    tft.setFont(&lgfxJapanGothic_12);
+    tft.setCursor(0, 1);
+    tft.setTextWrap(true);
+    tft.setTextColor(TFT_WHITE);
+    tft.fillScreen(HACO3_C1);
+    editorScroll();
+    editorDrawRows(&ab);
+
+    // 終端子をダミー文字ごと消す処理
+    if (ab.len > 0) {
+        ab.len--;
+        ab.b[ab.len] = '\0';
+    }
+
+    // カーソルを表示
+    tft.fillRect(getScreenCol() * 6, getScreenRow() * 13, 6, 13, HACO3_C8);
+
+    // スクリーンのリフレッシュ
+    tft.setCursor(0, 0);
+    tft.setTextColor(HACO3_C7);
+    tft.println(ab.b);
+    editorDrawStatusBar(tft, &ab);
+
+    // editorDrawMessageBar(tft,&ab);
+    abFree(&ab);
 }
+
 
 void Editor::editorUpdateRow(erow *row) {
   int tabs = 0; // タブ文字の数をカウントする変数
@@ -732,26 +782,137 @@ void Editor::editorUpdateRow(erow *row) {
 //     row->rsize = idx; // 描画データのサイズを更新
 // }
 
+
+
+void Editor::getCursorConfig(String _wrfile) {
+  File fr = SPIFFS.open(_wrfile, "r");
+  String line;
+  while (fr.available()) {
+    line = fr.readStringUntil('\n');
+    if (!line.isEmpty()) {
+
+        int commaIndex = line.indexOf(',');
+        String val = line.substring(0, commaIndex);
+
+        if(val.toInt() != NULL)
+        {
+          E.cx =  val.toInt();
+        }else {
+          E.cx =  0;//configファイルが壊れていても強制的に値を入れて立ち上げる
+        }
+
+        int nextCommaIndex = line.indexOf(',', commaIndex + 1);//一つ先のカンマ区切りの値に進める
+        if (nextCommaIndex != -1) {
+          val = line.substring(commaIndex + 1, nextCommaIndex);
+          if(val.toInt() != NULL){
+            E.cy =  val.toInt();
+          }else{
+            E.cy = 0;//configファイルが壊れていても強制的に値を入れて立ち上げる
+          }
+        }
+
+        int nextCommaIndex2 = line.indexOf(',', nextCommaIndex + 1);//一つ先のカンマ区切りの値に進める
+        if (nextCommaIndex2 != -1) {
+          val = line.substring(nextCommaIndex + 1, nextCommaIndex2);
+          if(val.toInt() != NULL){
+            E.rx =  val.toInt();
+          }else{
+            E.rx = 0;//configファイルが壊れていても強制的に値を入れて立ち上げる
+          }
+        }
+  Serial.print("GET");
+  Serial.print(E.cx);
+  Serial.print(":");
+  Serial.print(E.cy);
+  Serial.print(":");
+  Serial.println(E.rx);
+    }
+  }
+  fr.close();
+}
+
+//強制的にカーソル位置をセットする関数
+void Editor::setCursorConfig(int _cx, int _cy, int _rx) {
+  E.cx = _cx;
+  E.cy = _cy;
+  E.rx = _rx;
+  char numStr[100];//9999,999,9999,まで対応
+  sprintf(numStr, "%d,%d,%d,", 
+    E.cx, E.cy, E.rx
+  );
+
+  Serial.print("SET");
+  Serial.print(E.cx);
+  Serial.print(":");
+  Serial.print(E.cy);
+  Serial.print(":");
+  Serial.println(E.rx);
+  
+  String writeStr = numStr;  // 書き込み文字列を設定
+  File fw = SPIFFS.open("/init/param/editor.txt", "w"); // ファイルを書き込みモードで開く
+  fw.println(writeStr);  // ファイルに書き込み
+  delay(50);
+  fw.close(); // ファイルを閉じる
+}
+
+//現在のカーソルの位置をセットする関数
+void Editor::setCursorConfig() {
+  char numStr[100];//9999,999,9999,まで対応
+  sprintf(numStr, "%d,%d,%d,", 
+    E.cx, E.cy, E.rx
+  );
+
+  Serial.print("SET");
+  Serial.print(E.cx);
+  Serial.print(":");
+  Serial.print(E.cy);
+  Serial.print(":");
+  Serial.println(E.rx);
+  
+  String writeStr = numStr;  // 書き込み文字列を設定
+  File fw = SPIFFS.open("/init/param/editor.txt", "w"); // ファイルを書き込みモードで開く
+  fw.println(writeStr);  // ファイルに書き込み
+  delay(50);
+  fw.close(); // ファイルを閉じる
+}
+
+void Editor::setCursor(int _cx,int _cy,int _rx) {
+    E.cx = _cx;
+    E.cy = _cy;
+    E.rx = _rx;
+    // setCursorConfig();//外部ファイルに保存
+}
+
 void Editor::initEditor(LovyanGFX& tft) {
-  // E.cx = E.preCx;
-  // E.cy = E.preCy;
-  // E.rx = E.preRx;
-  if(firstBootF){
+  
+// Serial.print(appfileName);
+// Serial.print(":");
+// Serial.println(savedAppfileName);
+
+  if(!difffileF){
+    getCursorConfig("/init/param/editor.txt");//カーソル位置を取得
+    delay(50);
+  }else{
     E.cx = 0;
     E.cy = 0;
     E.rx = 0;
   }
+
+  // if(firstBootF){
+  //   setCursor(0,0,0);
+  // }
+  
   E.rowoff = 0;
   E.coloff = 0;
-  E.screenrows = 10;
-  E.screencols = 25;
+  E.screencols = 11;
+  E.screenrows = 26;
   E.numrows = 0;
   E.row = NULL;
   E.dirty = 0;
   E.filename = NULL;
   E.statusmsg[0] = '\0';
   E.statusmsg_time = 0;
-  E.screenrows -= 2;
+  E.screencols -= 2;
 
   // screen.fillScreen(TFT_DARKGREEN);
   tft.fillScreen(HACO3_C1);
@@ -805,6 +966,7 @@ void Editor::editorOpen(fs::FS &fs, const char *filename) {
 
     file.close();
   }
+
 }
 
 

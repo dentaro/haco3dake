@@ -18,11 +18,16 @@ PS2Keyboard keyboard;
 #define TFT_RUN_MODE false
 #define TFT_EDIT_MODE true
 
+
+
+
 uint64_t frame = 0;
 
 // bool isEditMode = true;
 bool isEditMode;
 bool firstBootF = true;
+bool difffileF = false;//前と違うファイルを開こうとしたときに立つフラグ
+
 std::deque<int> buttonState;//ボタンの個数未定
 // int buttonState[9];
 
@@ -156,6 +161,7 @@ LGFX_Sprite sprite88_0 = LGFX_Sprite(&tft);
 BaseGame* game;
 Tunes tunes;
 String appfileName = "";//最初に実行されるアプリ名
+String savedAppfileName = "";
 // String txtName = "/init/txt/sample.txt";//実行されるファイル名
 
 uint8_t mapsx = 0;
@@ -636,9 +642,9 @@ BaseGame* nextGameObject(String* _appfileName, int _gameState, String _mn)
 // char *A;
 
 uint32_t preTime;
-void setFileName(String s){
-  appfileName = s;
-}
+// void setFileName(String s){
+//   appfileName = s;
+// }
 
 void runFileName(String s){
   
@@ -726,9 +732,8 @@ void getOpenConfig(String _wrfile) {
   fr.close();
 }
 
-
 void setOpenConfig(String fileName, int _isEditMode) {
-  char numStr[100];
+  char numStr[64];//64文字まで
   sprintf(numStr, "%s,%d,", 
     fileName.c_str(), _isEditMode
   );
@@ -739,9 +744,11 @@ void setOpenConfig(String fileName, int _isEditMode) {
   String writeStr = numStr;  // 書き込み文字列を設定
   File fw = SPIFFS.open("/init/param/openconfig.txt", "w"); // ファイルを書き込みモードで開く
   fw.println(writeStr);  // ファイルに書き込み
+  // savedAppfileName = fileName;
   delay(50);
   fw.close(); // ファイルを閉じる
 }
+
 
 int readMap()
 {
@@ -836,92 +843,34 @@ void setTFTedit(bool _iseditmode){
 
 void setup()
 {
-
-  
   Serial.begin(115200);
   keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
+
+  // editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
+  // delay(50);
+
+  editor.getCursorConfig("/init/param/editor.txt");//カーソルの位置をよみこむ
+  delay(50);
   
   // screen.init();
   
   if(firstBootF == true){
+    difffileF = false;
 
-  Serial.begin(115200);
-  
-  #if !defined(__MIPSEL__)
-    while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
-    #endif
-    Serial.println("Keyboard Start");
+    #if !defined(__MIPSEL__)
+      while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
+      #endif
+      Serial.println("Keyboard Start");
 
-  if (!SPIFFS.begin(true))
-  {
-    Serial.println("An Error has occurred while mounting SPIFFS");
-    return;
-  }
-
-  // ui.begin( screen, 16, 1, false);
-
-  // appfileName = rFirstAppName("/init/param/firstAppName.txt");//最初に立ち上げるゲームのパスをSPIFFSのファイルfirstAppName.txtから読み込む
-  // getOpenConfig("/init/param/openconfig.txt");//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
-
-  // //-------------------------------------------------------------
-  // String host ="tokyo";//ルートディレクトリ名です。
-  // M5Stackの初期化
-  // M5.begin();
-  // M5.begin(false, true, true, false, kMBusModeInput ,false);
-  
-  //  SD.end();
-  // SDカードがマウントされているかの確認
-
-  // if(SD.begin(SDCARD_SS_PIN)){//custom設定のCPUのクロック周波数の定数分の1でないとタイミングが合わず、動かなくなるもよう
-  // //   Serial.println("Card Mount Successful");
-  // //   isCardMounted = true;
-  // //   delay(500);
-  // } else {
-  // //   Serial.println("Card Mount Failed");
-  // //   // SDカードのマウントに失敗した場合は、フラグをfalseに設定し、後で再試行する
-  // //   isCardMounted = false;
-  // //   // while (1) {}
-  // }
+    if (!SPIFFS.begin(true))
+    {
+      Serial.println("An Error has occurred while mounting SPIFFS");
+      return;
+    }
   }
 
   getOpenConfig("/init/param/openconfig.txt");//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
-
-  // if (SD.begin(SDCARD_SS_PIN)) {
-  //   Serial.println("SD card initialization successful!");
-  //   uint8_t cardType = SD.cardType();
-
-  //   switch (cardType) {
-  //     case CARD_NONE:
-  //       Serial.println("No SD card");
-  //       break;
-  //     case CARD_MMC:
-  //       Serial.println("MMC card");
-  //       break;
-  //     case CARD_SD:
-  //       Serial.println("SD card");
-  //       break;
-  //     case CARD_SDHC:
-  //       Serial.println("SDHC card");
-  //       break;
-  //     case CARD_UNKNOWN:
-  //     default:
-  //       Serial.println("Unknown card type");
-  //       break;
-  //   }
-  // } else {
-  //   Serial.println("SD card initialization failed!");
-  // }
-
-  // sprintf(str, "%d", ui.getCalData(0));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(1));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(2));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(3));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(4));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(5));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(6));sprintf(str, "%d", ",");
-  // sprintf(str, "%d", ui.getCalData(7));sprintf(str, "%d", ",");
-
-  // setTFTedit(TFT_RUN_MODE);
+ 
 
   if(isEditMode == TFT_RUN_MODE){
 
@@ -1050,72 +999,73 @@ if(firstBootF == true)
   }else if(isEditMode == TFT_EDIT_MODE){//エディットモードの時
     if(firstBootF == false){
       tft.deleteSprite();
-      delay(100);
+      delay(10);
     }
     setTFTedit(TFT_EDIT_MODE);
 
-  ui.begin( screen, 16, 1);
+    ui.begin( screen, 16, 1);
  
-  if(firstBootF == true)
-  {
+    if(firstBootF == true)
+    {
 
-    if (SPIFFS.exists(appfileName)) {
-      File file = SPIFFS.open(appfileName, FILE_READ);
-      if (!file) {
-        Serial.println("ファイルを開けませんでした");
-        return;
+      if (SPIFFS.exists(appfileName)) {
+        File file = SPIFFS.open(appfileName, FILE_READ);
+        if (!file) {
+          Serial.println("ファイルを開けませんでした");
+          return;
+        }
+        // ファイルからデータを読み込み、シリアルモニターに出力
+        while (file.available()) {
+          Serial.write(file.read());
+        }
+        // ファイルを閉じる
+        file.close();
       }
-      // ファイルからデータを読み込み、シリアルモニターに出力
-      while (file.available()) {
-        Serial.write(file.read());
-      }
-      // ファイルを閉じる
-      file.close();
-    }
 
-    //タッチボタンを生成
-    File fr = SPIFFS.open("/init/param/uiinfo.txt", "r");
-    String line;
+      //タッチボタンを生成
+      File fr = SPIFFS.open("/init/param/uiinfo.txt", "r");
+      String line;
 
-    while (fr.available()) {
-      line = fr.readStringUntil('\n');
-      if (!line.isEmpty()) {
-        int commaIndex = line.indexOf(',');
-        if (commaIndex != -1) {
-          String val = line.substring(0, commaIndex);
-          addUiNum[0] = val.toInt();
+      while (fr.available()) {
+        line = fr.readStringUntil('\n');
+        if (!line.isEmpty()) {
+          int commaIndex = line.indexOf(',');
+          if (commaIndex != -1) {
+            String val = line.substring(0, commaIndex);
+            addUiNum[0] = val.toInt();
 
-          if(addUiNum[0]!=-1){//-1の時は生成しない
+            if(addUiNum[0]!=-1){//-1の時は生成しない
 
-            for (int i = 1; i < 6; i++) {
-              int nextCommaIndex = line.indexOf(',', commaIndex + 1);
-              if (nextCommaIndex != -1) {
-                val = line.substring(commaIndex + 1, nextCommaIndex);
-                addUiNum[i] = val.toInt();
-                commaIndex = nextCommaIndex;
+              for (int i = 1; i < 6; i++) {
+                int nextCommaIndex = line.indexOf(',', commaIndex + 1);
+                if (nextCommaIndex != -1) {
+                  val = line.substring(commaIndex + 1, nextCommaIndex);
+                  addUiNum[i] = val.toInt();
+                  commaIndex = nextCommaIndex;
+                }
               }
+              ui.createPanel( addUiNum[0], addUiNum[1], addUiNum[2], addUiNum[3], addUiNum[4], addUiNum[5], TOUCH, ui.getTouchZoom());//ホームボタン
+              allAddUiNum++;
             }
-            ui.createPanel( addUiNum[0], addUiNum[1], addUiNum[2], addUiNum[3], addUiNum[4], addUiNum[5], TOUCH, ui.getTouchZoom());//ホームボタン
-            allAddUiNum++;
           }
         }
       }
-    }
-    fr.close();
-    game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
-    game->init();//（オブジェクト生成している）
-    tunes.init();//（オブジェクト生成している）
-    }
+      fr.close();
+      game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
+      game->init();//（オブジェクト生成している）
+      tunes.init();//（オブジェクト生成している）
 
-    frame=0;
-    // if(firstBootF){
+      frame=0;
+
       editor.initEditor(tft);
       editor.readFile(SPIFFS, appfileName.c_str());
       editor.editorOpen(SPIFFS, appfileName.c_str());
       editor.editorSetStatusMessage("Press ESCAPE to save file");
-    // }
+
+    }
 
   }
+  savedAppfileName = appfileName;//起動したゲームのパスを取得しておく
   firstBootF = false;
 }
 
@@ -1126,8 +1076,13 @@ int btn(int btnno){
 void restart(String _fileName, int _isEditMode)
 {
   setOpenConfig(_fileName, _isEditMode);
+  
+  editor.setCursorConfig();//カーソルの位置を保存
+  delay(100);
+
   firstBootF = false;
   setup();
+
   tunes.pause();
   game->pause();
   free(game);
@@ -1173,27 +1128,23 @@ void loop()
       // tft.setCursor(16, 16);
       // tft.display();
     } else {
-
       //通常の文字
       // Serial.print(keychar);
       // Serial.println(keychar);
     }
 
     // editor.update(tft, SPIFFS, SD, keychar);
-    editor.update(tft, SPIFFS, keychar);
+    // editor.update(tft, SPIFFS, keychar);
+    editor.editorProcessKeypress(keychar, SPIFFS);
     buttonState[pressedBtnID]++;
     // }
   
   }else{//キーアップの時など押されていないとき
   if(pressedBtnID!=-1)buttonState[pressedBtnID] = -1;
-    pressedBtnID = -1;//リセット
-    
-    //初期化
-    // for(int i=0;i<buttonState.size()-1;i++){
-    //   buttonState[i] = -1;
-    // }
-    
+    pressedBtnID = -1;//リセット    
   }
+
+  editor.editorRefreshScreen(tft);
 
   // screen.setCursor(20, (screen.height() >> 3) * 4);
   // screen.setTextSize(0);
@@ -1226,6 +1177,10 @@ void loop()
     //0ボタンで強制終了
     if (pressedBtnID == 0)
     { // reload
+
+      editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
+      delay(50);
+
       ui.setConstantGetF(false);//初期化処理 タッチポイントの常時取得を切る
       appfileName = "/init/main.lua";
       
@@ -1279,12 +1234,21 @@ void loop()
       tft.pushSprite(&screen,TFT_OFFSET_X,TFT_OFFSET_Y);//ゲーム画面を小さく高速描画する
     }
 
-    if(keychar == PS2_TAB){//キーボードからエディタ再起動
+    if(pressedBtnID == 5){//PAGEUP//キーボードからエディタ再起動
 
       // tft.deleteSprite();
       // setTFTedit(true);//エディットモードにセット
-      setOpenConfig(appfileName, 1);//エディットモードで再起動
-      setup();
+
+      
+      // if(appfileName != savedAppfileName){//違うゲームファイルを開こうとしていたら
+        // editor.setCursor(0,0,0);//カーソルの座標をリセット
+        // editor.setCursorConfig();//
+
+        // editor.getCursorConfig("/init/param/editor.txt");//外部ファイルに保存
+      // }
+      // setOpenConfig(appfileName, 1);//エディットモードで再起動
+      // setup();
+      restart(appfileName, 1);
       
       // reboot();
     }
@@ -1295,7 +1259,7 @@ void loop()
       float codelen = codeunit*10;
       
       float curpos = codeunit*editor.getCy();
-      float codepos = codeunit*(editor.getCy() - editor.getScreenCol());//getScreenColは関数名が間違ってるだけ、結果はroｗが返ってくる
+      float codepos = codeunit*(editor.getCy() - editor.getScreenRow());
       
       tft.fillRect(156,0, 4,128, HACO3_C5);//コードの全体の長さを表示
       tft.fillRect(156,int(codepos), 4,codelen, HACO3_C6);//コードの位置と範囲を表示
@@ -1306,6 +1270,10 @@ void loop()
       
       if(pressedBtnID == 0)//ESC
       {
+
+        editor.setCursorConfig(0,0,0);//カーソルの位置を保存
+        delay(100);
+
         restart("/init/main.lua", 0);
 
         // setOpenConfig("/init/main.lua", 0);
@@ -1314,6 +1282,11 @@ void loop()
       }
 
       if(pressedBtnID == 6){//PAGEDOWN
+
+      // savedAppfileName = appfileName;
+
+
+
         editor.editorSave(SPIFFS);//SPIFFSに保存
         delay(100);//ちょっと待つ
         // editor.editorSaveSD(SD);//SDに同時にバックアップ保存する
