@@ -6,25 +6,22 @@
 #include "KbdRptParser.h"
 #include "Editor.h"
 #include <PS2Keyboard.h>
+#include <esp_now.h>
+#include <WiFi.h>
+#include <LovyanGFX_DentaroUI.hpp>
+#include <map>
 
 #define KEYBOARD_DATA 32
 #define KEYBOARD_CLK  33
+#define TFT_RUN_MODE 0
+#define TFT_EDIT_MODE 1
+#define TFT_WIFI_MODE 2
 
 PS2Keyboard keyboard;
 
-#define LGFX_USE_V1
-#include <LovyanGFX.hpp>
-
-#define TFT_RUN_MODE false
-#define TFT_EDIT_MODE true
-
-
-
-
 uint64_t frame = 0;
 
-// bool isEditMode = true;
-bool isEditMode;
+int isEditMode;
 bool firstBootF = true;
 bool difffileF = false;//前と違うファイルを開こうとしたときに立つフラグ
 
@@ -40,9 +37,7 @@ enum struct FileType {
   OTHER
 };
 
-
 //キーボード関連
-
 Editor editor;
 
 // KbdRptParser Prs;
@@ -52,10 +47,6 @@ char keychar;//キーボードから毎フレーム入ってくる文字
 //esp-idfのライブラリを使う！
 //https://qiita.com/norippy_i/items/0ed46e06427a1d574625
 #include <driver/adc.h>//アナログボタンはこのヘッダファイルを忘れないように！！
-
-
-// どこかでMapDictionaryのインスタンスを取得しておく
-// MapDictionary& dict = MapDictionary::getInstance();
 
 using namespace std;
 
@@ -68,8 +59,6 @@ using namespace std;
 // int outputMode = FAST_MODE;//50FPS程度128*128 速いけど小さい画面　速度が必要なモード
 int outputMode = WIDE_MODE;//20FPS程度240*240 遅いけれどタッチしやすい画面　パズルなど
 
-// WifiGame* wifiGame = NULL;
-
 uint8_t xpos, ypos = 0;
 uint8_t colValR = 0;
 uint8_t colValG = 0;
@@ -78,6 +67,8 @@ uint8_t colValB = 0;
 uint8_t charSpritex = 0;
 uint8_t charSpritey = 0;
 int pressedBtnID = -1;//この値をタッチボタン、物理ボタンの両方から操作してbtnStateを間接的に操作している
+
+esp_now_peer_info_t slave;
 
 int mapsprnos[16];
 // int mapsprnos[16] = { 20, 11, 32, 44, 53, 49, 54, 32, 52, 41, 46, 42, 45, 50, 43, 38 };
@@ -118,25 +109,6 @@ const uint8_t RGBValues[][3] PROGMEM = {//16bit用
   static constexpr int HACO3_C13   = 33715;
   static constexpr int HACO3_C14   = 64341;
   static constexpr int HACO3_C15   = 65108;
-
-
-// //2倍拡大表示用のパラメータ
-// float matrix_side[6] = {2.0,   // 横2倍
-//                      -0.0,  // 横傾き
-//                      258.0,   // X座標
-//                      0.0,   // 縦傾き
-//                      2.0,   // 縦2倍
-//                      0.0    // Y座標
-//                     };
-
-// //2倍拡大表示用のパラメータ
-// float matrix_game[6] = {1.0,   // 横2倍
-//                      -0.0,  // 横傾き
-//                      0.0,   // X座標
-//                      0.0,   // 縦傾き
-//                      1.0,   // 縦2倍
-//                      0.0    // Y座標
-//                     };
 
 LGFX screen;//LGFXを継承
 
@@ -214,31 +186,11 @@ int ytileNo = 12909;
 
 LGFX_Sprite sprref;
 String oldKeys[BUF_PNG_NUM];
-// SemaphoreHandle_t xSemaphore = NULL;
-// タスクが終了したことを示すセマフォ
-// SemaphoreHandle_t taskSemaphore = NULL;
 
 int vol_value; //analog値を代入する変数を定義
 int statebtn_value; //analog値を代入する変数を定義
 int jsx_value; //analog値を代入する変数を定義
 int jsy_value; //analog値を代入する変数を定義
-
-//エディタ、キーイベント用
-// enum editorKey {
-//   BACKSPACE = 42,
-//   ARROW_LEFT = 80,
-//   ARROW_RIGHT = 79,
-//   ARROW_UP = 82,
-//   ARROW_DOWN = 81,
-//   DEL_KEY = 76,
-//   HOME_KEY = 74,
-//   END_KEY = 77,
-//   PAGE_UP = 75,
-//   PAGE_DOWN = 78,
-//   ENTER_KEY = 135,//13,//通常は13
-//   ESCAPE_KEY = 41
-// };
-
 // getSign関数をMapDictionaryクラス外に移動
 Vector2<int> getSign(int dirno) {
     if (dirno == -1) {
@@ -251,282 +203,31 @@ Vector2<int> getSign(int dirno) {
     }
 }
 
-// Vector2<int> getKey2Sign(String _currentKey, String _targetKey) {
-#include <LovyanGFX_DentaroUI.hpp>
-// #include <SPI.h>
-// #include <Wire.h>
-#include <map>
-// #include <SD.h>
-#include <Arduino.h>
-#include <FS.h>
-#include "SPIFFS.h"
-// // #include "runLuaGame.h"
-// #include "haco8/runHaco8Game.h"
+// 送信コールバック
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  tft.print("Last Packet Sent to: ");
+  tft.println(macStr);
+  tft.print("Last Packet Send Status: ");
+  tft.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
 
-// #include "Tunes.h"
-// #include "runJsGame.h"
-// #include "wifiGame.h"
-// MapTile構造体の定義
-// #define BUF_PNG_NUM 0
-
-// class MapTile {
-//   private:
-//     LGFX_Sprite* sprptr;
-//     Vector2<int> tileNo;
-//     // int xtileNo;
-//     // int ytileNo;
-//     String filePath;
-//     String newKey;
-//     String targetKey;
-//     String oldKey;
-//     int dirno;
-//     bool writableF;
-//     int oldreadNo;
-//   public:
-//   // 他のメンバ変数やメソッドの定義
-//     MapTile()
-//     : tileNo(0,0), sprptr(nullptr), dirno(0), filePath(""), newKey(""), oldKey(""), writableF(false), oldreadNo(-1)
-//     {
-//     }
-
-//     // 初期化メソッドなどを追加する場合もあります
-//     void init() {
-//         // 初期化処理を記述
-//     }
-    
-//     void drawMap2(LovyanGFX& _buffSprite, int _bufx, int _bufy) {
-
-//        if (sprptr != nullptr) {
-//             // 登録されたスプライトを描画
-//             sprptr->pushSprite(&_buffSprite, _bufx, _bufy);
-
-//         }
-//     }
-
-//     void setOldreadNo(int _oldreadNo){
-//       oldreadNo = _oldreadNo;
-//     }
-
-//     int getOldreadNo(){
-//       return oldreadNo;
-//     }
-
-//     void setWritableF2(bool _writableF){
-//       writableF = _writableF;
-//     }
-
-//     bool getWritableF2(){
-//       return writableF;
-//     }
-    
-    
-//     void setDirNo2( int _dirno ){
-//       dirno = _dirno;
-//     }
-
-//     int getDirNo2(){
-//       return dirno;
-//     }
-//     LGFX_Sprite* getSprptr2() {
-//         return sprptr;
-//     }
-
-//     // メンバ変数をセットするメソッド
-//     void setNewKey2(const String& _Key) {
-//       // Serial.println(_Key);
-//       newKey = _Key;
-//     }
-
-//     void setTileNo2(Vector2<int> _tileNo){
-//       tileNo = _tileNo;
-//     }
-
-//     // メンバ変数をゲットするメソッド
-//     const String getNewKey2() const {
-//         return newKey;
-//     }
-
-//     void setSprptr2(LGFX_Sprite* _sprptr) {
-//      sprptr = _sprptr; // メンバ変数にスプライトへのポインタを代入
-//     }
-
-// };
-
-// MapDictionaryクラスの定義
-//マップの検索を行う
-// class MapDictionary {
-// private:
-//     MapTile maptils[BUF_PNG_NUM];
-//     std::map<String, LGFX_Sprite*> key2ptr;
-
-//     String newKeys[BUF_PNG_NUM];
-//     String oldKeys[BUF_PNG_NUM];
-//     int dirNos[BUF_PNG_NUM];
-
-// public:
-//     static MapDictionary& getInstance() {
-//       static MapDictionary instance;
-//       return instance;
-//     }
-
-//     LGFX_Sprite* getSprptr(int no){
-//       return maptils[no].getSprptr2();
-//     } 
-
-//     void setSprptr(int no, LGFX_Sprite* _sprptr){
-//       maptils[no].setSprptr2(_sprptr);
-//     }
-
-//     void copy2buff(LovyanGFX& _buffSprite, LGFX_Sprite* _sprptr, int no) {
-//         // maptils[no].setSprptr2(_sprptr);
-//         // setSprptr(no, _sprptr);
-//         // maptils[no].drawMap2(_buffSprite,0,0);
-
-//         // _buffSprite.
-//         _buffSprite.fillRect(20*no, 20*no, 20,20, TFT_BLUE);
-
-//         // _sprptr->pushSprite(&_buffSprite, 0,0);
-//     }
-
-//     void setWritableF(int no, bool _writableF){
-//       maptils[no].setWritableF2(_writableF);
-//     }
-
-//     bool getWritableF(int no){
-//       return maptils[no].getWritableF2();
-//     }
-
-
-//     void setDirNo( int no, int _dirno){
-//       maptils[no].setDirNo2( _dirno );
-//     }
-
-//   void setReadNos( int _dirno){
-//     if(_dirno == -1){//止まっていたら
-//       for(int i=0;i<9;i++){
-//         maptils[i].setDirNo2( i - 1 );//ひとまず0方向と同じ読み込み順にする
-//       }
-//     }else{
-
-//       maptils[0].setDirNo2( -1 );//現在位置
-//       // 進行方向を中心にした読み込み順を決める
-//       maptils[1].setDirNo2(  _dirno );//進行方向
-//       maptils[2].setDirNo2( (_dirno + 8 - 1) % 8);
-//       maptils[3].setDirNo2( (_dirno + 8 + 1) % 8);
-//       maptils[4].setDirNo2( (_dirno + 8 - 2) % 8);
-//       maptils[5].setDirNo2( (_dirno + 8 + 2) % 8);
-//       maptils[6].setDirNo2( (_dirno + 8 - 3) % 8);
-//       maptils[7].setDirNo2( (_dirno + 8 + 3) % 8);
-//       maptils[8].setDirNo2( (_dirno + 8 - 4) % 8);
-//     }
-//     maptils[0].setDirNo2( -1 );//現在位置
-//   }
-
-// int getDirNo(int no) {
-//     return maptils[no].getDirNo2(); 
-// }
-
-//   Vector2<int> getTilePos(int _dirNo) {
-//     Vector2<int> directions[] = {//ベクトル { X, Y, DirNo}
-//         { 0,  0},  //-1
-//         { 1,  0},  // 0
-//         { 1,  1},  // 1
-//         { 0,  1},  // 2
-//         {-1,  1},  // 3
-//         {-1,  0},  // 4
-//         {-1, -1},  // 5
-//         { 0, -1},  // 6
-//         { 1, -1}   // 7
-//     };
-    
-//     if (_dirNo >= -1 && _dirNo <= 7) {
-//         return directions[_dirNo + 1]; // 配列のインデックスは-1から始まるため、+1する
-//     } else {
-//         return {0, 0}; // デフォルト
-//     }
-//   }
-
-//   int getTargetDirNo(float _x, float _y){
-//     float angle = atan2(_y, _x) + 2 * M_PI;
-//       return fmod(angle / (M_PI / 4), 8);
-//   }
-
-//   int getTargetDirNo(Vector3<float> _pos){
-//     float angle = atan2(_pos.getY(), _pos.getX()) + 2 * M_PI;
-//       return fmod(angle / (M_PI / 4), 8);
-//   }
-
-//   MapTile getMapTile(int no){
-//     return maptils[no];//ディクショナリー内から
-//   }
-
-//   void setNewKey(int no, String& _Key) {
-//     newKeys[no] = _Key;//ディクショナリー内に登録
-
-//     maptils[no].setTileNo2(getKey2tileNo(_Key));
-
-//     if (no >= 0 && no < BUF_PNG_NUM) {
-//       maptils[no].setNewKey2(_Key);  // //マップタイル自体に登録する
-
-//       if (key2ptr.count(_Key) == 0) {
-//           key2ptr[_Key] = getSprptr(no);  // キーをポインタに紐付ける
-//       } else {
-//           // 既にキーが存在する場合の処理
-//           // 例えば、上書きするかどうかの判断など
-//       }
-//     }
-//   }
-
-//   void showKeyInfo(String& _Key){
-//     if(key2ptr.count(_Key)>0){
-//       Serial.print(_Key+"の数：");
-//       Serial.println(key2ptr.count(_Key));
-//     }
-//   }
-
-
-//   LGFX_Sprite* getKey2sprptr(const String& _Key) {
-
-//     if (key2ptr.count(_Key) > 0) {
-      
-//         auto it = key2ptr.find(_Key);
-//         return it->second;
-//     } else {
-//         // キーが見つからない場合はnullptrを返す
-//         return nullptr;
-//     }
-//   }
-
-//   Vector2<int> getKey2tileNo(String& _Key) {
-//     if (key2ptr.count(_Key) > 0) {
-//         int slashPos = _Key.indexOf('/'); // '/'の位置を取得
-//         if (slashPos != -1) { // '/'が見つかった場合
-//             String numA_str = _Key.substring(0, slashPos); // '/'より前の部分を取得
-//             String numB_str = _Key.substring(slashPos + 1); // '/'より後の部分を取得
-//             int numA = numA_str.toInt(); // 数字に変換
-//             int numB = numB_str.toInt(); // 数字に変換
-//             return {numA, numB}; // Vector2<int>を返す
-//         }
-//     }
-//     // キーが見つからない場合や'/'が見つからない場合はデフォルトのVector2<int>を返す
-//     return {-1, -1};
-// }
-
-
-//   String getNewKey(int no) {
-//       if (no >= 0 && no < BUF_PNG_NUM) {
-//           return maptils[no].getNewKey2();
-//       }
-//       return ""; // エラー時は空文字列を返す
-//   }
-
-//   bool getAlreadyDownlordedF(String& _Key){
-//     if (key2ptr.count(_Key) > 0) return true;
-//     else return false;
-
-//   }
-
-// };
+// 受信コールバック
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+  char macStr[18];
+  char msg[1];
+  snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  // tft.printf("Last Packet Recv from: %s\n", macStr);//MACアドレスを表示させる
+  tft.printf("Last Packet Recv Data(%d): ", data_len);
+  for ( int i = 0 ; i < data_len ; i++ ) {
+    msg[1] = data[i];
+    tft.print(msg[1]);
+  }
+  tft.println("");
+}
 
 Vector2<int> getKey2Sign(String _currentKey, String _targetKey) {
     int slashPos = _currentKey.indexOf('/'); // '/'の位置を取得
@@ -585,6 +286,10 @@ void reboot()
 {
   ESP.restart();
 }
+
+
+
+
 
 FileType detectFileType(String *appfileName)
 {
@@ -828,131 +533,26 @@ vector<string> split(string& input, char delimiter)
     return result;
 }
 
-void setTFTedit(bool _iseditmode){
-  if(_iseditmode == true){
+void setTFTedit(int _iseditmode){
+
+  if(_iseditmode ==TFT_RUN_MODE){
     tft.setPsram( false );//DMA利用のためPSRAMは切る
     tft.createSprite( TFT_WIDTH, TFT_HEIGHT );//PSRAMを使わないギリギリ
     tft.startWrite();//CSアサート開始
-  }else if(_iseditmode == false){
+  }else if(_iseditmode == TFT_EDIT_MODE){
+    tft.setPsram( false );//DMA利用のためPSRAMは切る
+    tft.createSprite( TFT_WIDTH, TFT_HEIGHT );
+    tft.startWrite();//CSアサート開始
+  }
+  else if(_iseditmode == TFT_WIFI_MODE){
     tft.setPsram( false );//DMA利用のためPSRAMは切る
     tft.createSprite( TFT_WIDTH, TFT_HEIGHT );
     tft.startWrite();//CSアサート開始
   }
 }
 
-
-void setup()
-{
-  Serial.begin(115200);
-  keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
-
-  // editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
-  // delay(50);
-
-  editor.getCursorConfig("/init/param/editor.txt");//カーソルの位置をよみこむ
-  delay(50);
-  
-  // screen.init();
-  
-  if(firstBootF == true){
-    difffileF = false;
-
-    #if !defined(__MIPSEL__)
-      while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
-      #endif
-      Serial.println("Keyboard Start");
-
-    if (!SPIFFS.begin(true))
-    {
-      Serial.println("An Error has occurred while mounting SPIFFS");
-      return;
-    }
-  }
-
-  getOpenConfig("/init/param/openconfig.txt");//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
- 
-
-  if(isEditMode == TFT_RUN_MODE){
-
-    if(firstBootF == false){
-      tft.deleteSprite();
-      delay(100);
-    }
-    setTFTedit(TFT_RUN_MODE);
-
-  //   //外部物理ボタンの設定
-  // adc1_config_width(ADC_WIDTH_BIT_12);
-  // //何ビットのADCを使うか設定する。今回は12bitにします。
-  // //adc1の場合はこのように使うチャンネル全体の設定をするコマンドが用意されている。
-  // adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_11);//39pin　4つのボタン
-  // adc1_config_channel_atten(ADC1_CHANNEL_5, ADC_ATTEN_DB_11);//33pin　ボリューム
-  // adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);//34pin　ジョイスティックX
-  // adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);//35pin　ジョイスティックY
-
-  //sin 0~90度をメモリに保持する
-
-  ui.begin( screen, 16, 1);
-
-    // for (int i = 0; i < 90; ++i) {
-    //   float radians = i * M_PI / 180.0;
-    //   sinValues[i] = sin(radians);
-    // }
-    // sinValues[90] = 1.0;
-    // sinValues[270] = -1.0;
-
-// if(firstBootF == true)
-// {
-  sprite88_0.setPsram(false );
-  sprite88_0.setColorDepth(16);//子スプライトの色深度
-  sprite88_0.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
-
-  //sprite88_0.drawPngFile(SPIFFS, "/init/sprite.png", -8*1, -8*0);
-
-  sprite64.setPsram(false );
-  sprite64.setColorDepth(16);//子スプライトの色深度
-  sprite64.createSprite(64, 64);//ゲーム画面用スプライトメモリ確保//wroomだと64*128だとメモリオーバーしちゃう
-
-  sprite64.drawPngFile(SPIFFS, "/init/initspr.png", 0, 0);
-  
-  //psram使えない-------------------------------------------
-  // buffSprite.setPsram( true );
-  // buffSprite.setColorDepth(16);//子スプライトの色深度
-  // buffSprite.createSprite(256, 256);//ゲーム画面用スプライトメモリ確保
-
-  // for( int i = 0; i < BUF_PNG_NUM; i++ ){
-  //   mapTileSprites[i].setPsram(true);
-  //   mapTileSprites[i].setColorDepth(16);
-  //   mapTileSprites[i].createSprite(256,256);
-  //   // MapTile クラスをインスタンス化し、スプライトに描画して返す
-  //   dict.copy2buff(buffSprite, &mapTileSprites[i], i);
-  // }
-
-  // //キーと紐づけ、初期設定のキー0~9と値のペアを適当に登録しておく
-  // for(int j = 0; j<3; j++){
-  //   for(int i = 0; i<3; i++){
-  //     dict.setSprptr(i*3+j, &mapTileSprites[i]);
-  //     dict.setNewKey(i*3+j, String(xtileNo+i) + "/" + String(ytileNo+j));
-  //     dict.showKeyInfo(String(xtileNo+i) + "/" + String(ytileNo+j));
-  //   }
-  // }
-  //psram使えない-------------------------------------------
-
-  sprite88_roi.setPsram(false );
-  sprite88_roi.setColorDepth(16);//子スプライトの色深度
-  sprite88_roi.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
-
-  sprite11_roi.setPsram(false );
-  sprite11_roi.setColorDepth(16);//子スプライトの色深度
-  sprite11_roi.createSprite(1, 1);//ゲーム画面用スプライトメモリ確保
-
-  spriteMap.setPsram(false );
-  spriteMap.setColorDepth(16);//子スプライトの色深度
-  spriteMap.createSprite(MAPWH, MAPWH/divnum);//マップ展開用スプライトメモリ確保
-
-  if(firstBootF == true)
-{
-
-  //タッチボタンを生成
+void createAbsUI(){
+  //抽象UIを生成
   File fr = SPIFFS.open("/init/param/uiinfo.txt", "r");
   String line;
 
@@ -981,99 +581,19 @@ void setup()
     }
   }
   fr.close();
-
-  // delay(100);
-
-  // mapready = false;
-  // while(mapready == false){
-  //   readMap(1);
-  // };//マップ番号を指定し、読み込み終わるまで待機
-
-  mapFileName = "/init/map/0.png";
-  readMap();
-  delay(100);
-
-  game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
-  game->init();//（オブジェクト生成している）
-  tunes.init();//（オブジェクト生成している）
-  }
-
-  frame=0;
-  }else if(isEditMode == TFT_EDIT_MODE){//エディットモードの時
-    if(firstBootF == false){
-      tft.deleteSprite();
-      delay(10);
-    }
-    setTFTedit(TFT_EDIT_MODE);
-
-    ui.begin( screen, 16, 1);
- 
-    if(firstBootF == true)
-    {
-
-      if (SPIFFS.exists(appfileName)) {
-        File file = SPIFFS.open(appfileName, FILE_READ);
-        if (!file) {
-          Serial.println("ファイルを開けませんでした");
-          return;
-        }
-        // ファイルからデータを読み込み、シリアルモニターに出力
-        while (file.available()) {
-          Serial.write(file.read());
-        }
-        // ファイルを閉じる
-        file.close();
-      }
-
-      //タッチボタンを生成
-      File fr = SPIFFS.open("/init/param/uiinfo.txt", "r");
-      String line;
-
-      while (fr.available()) {
-        line = fr.readStringUntil('\n');
-        if (!line.isEmpty()) {
-          int commaIndex = line.indexOf(',');
-          if (commaIndex != -1) {
-            String val = line.substring(0, commaIndex);
-            addUiNum[0] = val.toInt();
-
-            if(addUiNum[0]!=-1){//-1の時は生成しない
-
-              for (int i = 1; i < 6; i++) {
-                int nextCommaIndex = line.indexOf(',', commaIndex + 1);
-                if (nextCommaIndex != -1) {
-                  val = line.substring(commaIndex + 1, nextCommaIndex);
-                  addUiNum[i] = val.toInt();
-                  commaIndex = nextCommaIndex;
-                }
-              }
-              ui.createPanel( addUiNum[0], addUiNum[1], addUiNum[2], addUiNum[3], addUiNum[4], addUiNum[5], TOUCH, ui.getTouchZoom());//ホームボタン
-              allAddUiNum++;
-            }
-          }
-        }
-      }
-      fr.close();
-      game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
-      game->init();//（オブジェクト生成している）
-      tunes.init();//（オブジェクト生成している）
-
-      frame=0;
-
-      editor.initEditor(tft);
-      editor.readFile(SPIFFS, appfileName.c_str());
-      editor.editorOpen(SPIFFS, appfileName.c_str());
-      editor.editorSetStatusMessage("Press ESCAPE to save file");
-
-    }
-
-  }
-  savedAppfileName = appfileName;//起動したゲームのパスを取得しておく
-  firstBootF = false;
 }
+
 
 int btn(int btnno){
   return buttonState[btnno];//ボタンの個数未定
+}
+
+void reboot(String _fileName, int _isEditMode)
+{
+  setOpenConfig(_fileName, _isEditMode);
+  editor.setCursorConfig();//カーソルの位置を保存
+  delay(100);
+  ESP.restart();
 }
 
 void restart(String _fileName, int _isEditMode)
@@ -1099,8 +619,281 @@ void restart(String _fileName, int _isEditMode)
   tunes.resume();
 }
 
+
+void broadchat() {
+  if ("/init/chat/m.txt" == NULL) return;
+  File fp = SPIFFS.open("/init/chat/m.txt", FILE_READ); // SPIFFSからファイルを読み込み
+
+  if (!fp) {
+    editor.editorSetStatusMessage("Failed to open file");
+    return;
+  }
+
+  std::vector<uint8_t> data;
+  while (fp.available()) {
+    char c = fp.read();
+    data.push_back(c);
+    if (data.size() >= 150) {
+      esp_err_t result = esp_now_send(slave.peer_addr, data.data(), data.size());
+      data.clear(); // データを送信したらクリア
+      if (result != ESP_OK) {
+        editor.editorSetStatusMessage("Failed to send message");
+        fp.close();
+        return;
+      }
+    }
+  }
+
+  // ファイルの残りのデータを送信
+  if (data.size() > 0) {
+    esp_err_t result = esp_now_send(slave.peer_addr, data.data(), data.size());
+    if (result != ESP_OK) {
+      editor.editorSetStatusMessage("Failed to send message");
+      fp.close();
+      return;
+    }
+  }
+
+  fp.close();
+  editor.editorSetStatusMessage("Message sent");
+}
+
+
+void setup()
+{
+  Serial.begin(115200);
+  keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
+
+  editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
+
+  delay(50);
+  if(firstBootF == true){
+    difffileF = false;
+
+    #if !defined(__MIPSEL__)
+      while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
+      #endif
+      Serial.println("Keyboard Start");
+
+    if (!SPIFFS.begin(true))
+    {
+      Serial.println("An Error has occurred while mounting SPIFFS");
+      return;
+    }
+  }
+
+  getOpenConfig("/init/param/openconfig.txt");//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
+
+  if(isEditMode == TFT_RUN_MODE){
+
+    if(firstBootF == false){
+      tft.deleteSprite();
+      delay(100);
+    }
+    setTFTedit(TFT_RUN_MODE);
+
+    //   //外部物理ボタンの設定
+    // adc1_config_width(ADC_WIDTH_BIT_12);
+    // //何ビットのADCを使うか設定する。今回は12bitにします。
+    // //adc1の場合はこのように使うチャンネル全体の設定をするコマンドが用意されている。
+    // adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_11);//39pin　4つのボタン
+    // adc1_config_channel_atten(ADC1_CHANNEL_5, ADC_ATTEN_DB_11);//33pin　ボリューム
+    // adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);//34pin　ジョイスティックX
+    // adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);//35pin　ジョイスティックY
+
+    //sin 0~90度をメモリに保持する
+    ui.begin( screen, 16, 1);
+
+    // for (int i = 0; i < 90; ++i) {
+    //   float radians = i * M_PI / 180.0;
+    //   sinValues[i] = sin(radians);
+    // }
+    // sinValues[90] = 1.0;
+    // sinValues[270] = -1.0;
+
+    sprite88_0.setPsram(false );
+    sprite88_0.setColorDepth(16);//子スプライトの色深度
+    sprite88_0.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
+
+    //sprite88_0.drawPngFile(SPIFFS, "/init/sprite.png", -8*1, -8*0);
+
+    sprite64.setPsram(false );
+    sprite64.setColorDepth(16);//子スプライトの色深度
+    sprite64.createSprite(64, 64);//ゲーム画面用スプライトメモリ確保//wroomだと64*128だとメモリオーバーしちゃう
+
+    sprite64.drawPngFile(SPIFFS, "/init/initspr.png", 0, 0);
+    
+    //psram使えない-------------------------------------------
+    // buffSprite.setPsram( true );
+    // buffSprite.setColorDepth(16);//子スプライトの色深度
+    // buffSprite.createSprite(256, 256);//ゲーム画面用スプライトメモリ確保
+
+    // for( int i = 0; i < BUF_PNG_NUM; i++ ){
+    //   mapTileSprites[i].setPsram(true);
+    //   mapTileSprites[i].setColorDepth(16);
+    //   mapTileSprites[i].createSprite(256,256);
+    //   // MapTile クラスをインスタンス化し、スプライトに描画して返す
+    //   dict.copy2buff(buffSprite, &mapTileSprites[i], i);
+    // }
+
+    // //キーと紐づけ、初期設定のキー0~9と値のペアを適当に登録しておく
+    // for(int j = 0; j<3; j++){
+    //   for(int i = 0; i<3; i++){
+    //     dict.setSprptr(i*3+j, &mapTileSprites[i]);
+    //     dict.setNewKey(i*3+j, String(xtileNo+i) + "/" + String(ytileNo+j));
+    //     dict.showKeyInfo(String(xtileNo+i) + "/" + String(ytileNo+j));
+    //   }
+    // }
+    //psram使えない-------------------------------------------
+
+    sprite88_roi.setPsram(false );
+    sprite88_roi.setColorDepth(16);//子スプライトの色深度
+    sprite88_roi.createSprite(8, 8);//ゲーム画面用スプライトメモリ確保
+
+    sprite11_roi.setPsram(false );
+    sprite11_roi.setColorDepth(16);//子スプライトの色深度
+    sprite11_roi.createSprite(1, 1);//ゲーム画面用スプライトメモリ確保
+
+    spriteMap.setPsram(false );
+    spriteMap.setColorDepth(16);//子スプライトの色深度
+    spriteMap.createSprite(MAPWH, MAPWH/divnum);//マップ展開用スプライトメモリ確保
+
+    if(firstBootF == true)
+    {
+      createAbsUI();
+      mapFileName = "/init/map/0.png";
+      readMap();
+      delay(50);
+
+      game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
+      game->init();//（オブジェクト生成している）
+      tunes.init();//（オブジェクト生成している）
+    }
+
+    frame=0;
+    }
+    else if(isEditMode == TFT_EDIT_MODE)//エディットモードの時
+    {
+      if(firstBootF == false){
+        tft.deleteSprite();
+        delay(10);
+      }
+      setTFTedit(TFT_EDIT_MODE);
+      
+      ui.begin( screen, 16, 1);
+
+      if(firstBootF == true)
+      {
+
+        if (SPIFFS.exists(appfileName)) {
+          File file = SPIFFS.open(appfileName, FILE_READ);
+          if (!file) {
+            Serial.println("ファイルを開けませんでした");
+            return;
+          }
+          // ファイルからデータを読み込み、シリアルモニターに出力
+          while (file.available()) {
+            Serial.write(file.read());
+          }
+          // ファイルを閉じる
+          file.close();
+        }
+
+      createAbsUI();
+      game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
+      game->init();//（オブジェクト生成している）
+      tunes.init();//（オブジェクト生成している）
+
+      frame=0;
+
+      editor.initEditor(tft,11, 22);
+      editor.readFile(SPIFFS, appfileName.c_str());
+      editor.editorOpen(SPIFFS, appfileName.c_str());
+      editor.editorSetStatusMessage("Press ESCAPE to save file");
+
+    }
+
+  }
+  else if(isEditMode == TFT_WIFI_MODE)
+  {
+    if(firstBootF == false){
+      tft.deleteSprite();
+      delay(100);
+    }
+    setTFTedit(TFT_WIFI_MODE);
+
+    ui.begin( screen, 16, 1);
+
+    if(firstBootF == true)
+    {
+      tft.setTextSize(1);//サイズ
+      tft.setFont(&lgfxJapanGothicP_8);//日本語可
+      tft.setCursor(0, 0);//位置
+      tft.setTextWrap(true);
+      tft.println("BOOT:WIFI_MODE");
+
+      if (SPIFFS.exists(appfileName)) {
+        File file = SPIFFS.open(appfileName, FILE_READ);
+        if (!file) {
+          Serial.println("ファイルを開けませんでした");
+          return;
+        }
+        // ファイルからデータを読み込み、シリアルモニターに出力
+        while (file.available()) {
+          Serial.write(file.read());
+        }
+        // ファイルを閉じる
+        file.close();
+      }
+
+      createAbsUI();
+      game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
+      game->init();//（オブジェクト生成している）
+      tunes.init();//（オブジェクト生成している）
+
+      frame=0;
+
+      editor.initEditor(tft, 11, 22);//11行25文字
+      editor.readFile(SPIFFS, "/init/chat/m.txt");
+      editor.editorOpen(SPIFFS, "/init/chat/m.txt");
+      editor.editorSetStatusMessage("Press ESCAPE to save file");
+
+      // ESP-NOW初期化
+      WiFi.mode(WIFI_STA);
+      WiFi.disconnect();
+
+      if (esp_now_init() == ESP_OK) {
+        tft.println("ESPNow Init Success");
+      } else {
+        tft.println("ESPNow Init Failed");
+        ESP.restart();
+      }
+
+      // マルチキャスト用Slave登録
+      memset(&slave, 0, sizeof(slave));
+      for (int i = 0; i < 6; ++i) {
+        slave.peer_addr[i] = (uint8_t)0xff;
+      }
+      
+      esp_err_t addStatus = esp_now_add_peer(&slave);
+      if (addStatus == ESP_OK) {
+        // Pair success
+        tft.println("Pair success");
+      }
+      // ESP-NOWコールバック登録
+      esp_now_register_send_cb(OnDataSent);
+      esp_now_register_recv_cb(OnDataRecv);
+
+    }
+
+  }
+  savedAppfileName = appfileName;//起動したゲームのパスを取得しておく
+  firstBootF = false;
+}
+
 void loop()
 {
+  
   //キー取得
   pressedBtnID = -1;//リセット
   if (keyboard.available()) {
@@ -1164,7 +957,7 @@ void loop()
   uint32_t remainTime= (now - preTime);
   preTime = now;
 
-  if( isEditMode == 0 ){
+  if( isEditMode == TFT_RUN_MODE ){
     //ゲーム内のprint時の文字設定をしておく
     tft.setTextSize(1);//サイズ
     tft.setFont(&lgfxJapanGothicP_8);//日本語可
@@ -1225,7 +1018,7 @@ void loop()
     // ui.showTouchEventInfo( tft, 0, 100 );//タッチイベントを視覚化する
     // ui.showInfo( tft, 0, 100+8 );//ボタン情報、フレームレート情報などを表示します。
 
-    
+  
     if(outputMode == WIDE_MODE){
       // tft.pushAffine(matrix_game);//ゲーム画面を最終描画する
 
@@ -1238,71 +1031,95 @@ void loop()
     }
 
     if(pressedBtnID == 5){//PAGEUP//キーボードからエディタ再起動
-
-      // tft.deleteSprite();
-      // setTFTedit(true);//エディットモードにセット
-
-      
-      // if(appfileName != savedAppfileName){//違うゲームファイルを開こうとしていたら
-        // editor.setCursor(0,0,0);//カーソルの座標をリセット
-        // editor.setCursorConfig();//
-
-        // editor.getCursorConfig("/init/param/editor.txt");//外部ファイルに保存
-      // }
-      // setOpenConfig(appfileName, 1);//エディットモードで再起動
-      // setup();
       restart(appfileName, 1);
-      
-      // reboot();
     }
 
-    }else if(isEditMode == 1){//エディットモードの時
+  }
+  else if(isEditMode == TFT_EDIT_MODE)
+  {
 
-      float codeunit = 128.0/float(editor.getNumRows());
-      float codelen = codeunit*10;
-      
-      float curpos = codeunit*editor.getCy();
-      float codepos = codeunit*(editor.getCy() - editor.getScreenRow());
-      
-      tft.fillRect(156,0, 4,128, HACO3_C5);//コードの全体の長さを表示
-      tft.fillRect(156,int(codepos), 4,codelen, HACO3_C6);//コードの位置と範囲を表示
-      if(codeunit>=1){tft.fillRect(155, int(curpos), 4, codeunit, HACO3_C8);}//コードの位置と範囲を表示
-      else{tft.fillRect(155, int(curpos), 4, 1, HACO3_C8);}//１ピクセル未満の時は見えなくなるので１に
-      
-      tft.pushSprite(&screen,0,0);
-      
-      if(pressedBtnID == 0)//ESC
-      {
-
-        editor.setCursorConfig(0,0,0);//カーソルの位置を保存
-        delay(100);
-
-        restart("/init/main.lua", 0);
-
-        // setOpenConfig("/init/main.lua", 0);
-        // // setup();
-        // reboot();
-      }
-
-      if(pressedBtnID == 6){//PAGEDOWN
-
-      // savedAppfileName = appfileName;
-
-
-
-        editor.editorSave(SPIFFS);//SPIFFSに保存
-        delay(100);//ちょっと待つ
-        // editor.editorSaveSD(SD);//SDに同時にバックアップ保存する
-        restart(appfileName, 0);
-      }
+    float codeunit = 128.0/float(editor.getNumRows());
+    float codelen = codeunit*10;
+    
+    float curpos = codeunit*editor.getCy();
+    float codepos = codeunit*(editor.getCy() - editor.getScreenRow());
+    
+    tft.fillRect(156,0, 4,128, HACO3_C5);//コードの全体の長さを表示
+    tft.fillRect(156,int(codepos), 4,codelen, HACO3_C6);//コードの位置と範囲を表示
+    if(codeunit>=1){tft.fillRect(155, int(curpos), 4, codeunit, HACO3_C8);}//コードの位置と範囲を表示
+    else{tft.fillRect(155, int(curpos), 4, 1, HACO3_C8);}//１ピクセル未満の時は見えなくなるので１に
+    
+    tft.pushSprite(&screen,0,0);
+    
+    if(pressedBtnID == 0)//ESC
+    {
+      editor.setCursorConfig(0,0,0);//カーソルの位置を保存
+      delay(50);
+      restart("/init/main.lua", 0);
     }
 
-    frame++;
-    if(frame > 18446744073709551615)frame = 0;
+    if(pressedBtnID == 6){//PAGEDOWN
+      editor.editorSave(SPIFFS);//SPIFFSに保存
+      delay(100);//ちょっと待つ
+      reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
+      // restart(appfileName, 0);
+      // broadchat();//ファイルの中身をブロードキャスト送信する（ファイルは消えない）
+    }
 
-    // if (!keyboard.available()){
-    //   tft.print("キーボードが使えません。");
+  }
+  else if(isEditMode == TFT_WIFI_MODE)
+  {
+  
+    if(pressedBtnID == 0)//ESC
+    {
+      editor.setCursorConfig(0,0,0);//カーソルの位置を保存
+      delay(50);
+      restart("/init/main.lua", 0);
+    }
+
+    tft.setTextSize(1);//サイズ
+    tft.setFont(&lgfxJapanGothicP_8);//日本語可
+    tft.setCursor(0, 0);//位置
+    tft.setTextWrap(true);
+    tft.setTextScroll(true);
+
+    if(pressedBtnID == 6){//PAGEDOWN
+      editor.editorSave(SPIFFS);//SPIFFSに保存
+      delay(100);//ちょっと待つ
+      broadchat();
+    }
+    
+    // if(pressedBtnID == 2){//>ボタンが押されたら送信
+    //   uint8_t data[13] = {'H', 'A', 'C', 'O', '3', 32, 69, 83, 80, 45, 78, 79, 87};
+    //   esp_err_t result = esp_now_send(slave.peer_addr, data, sizeof(data));
+    //   tft.print("Send Status: ");
+    //   if (result == ESP_OK) {
+    //     tft.println("Success");
+    //   } else if (result == ESP_ERR_ESPNOW_NOT_INIT) {
+    //     tft.println("ESPNOW not Init.");
+    //   } else if (result == ESP_ERR_ESPNOW_ARG) {
+    //     tft.println("Invalid Argument");
+    //   } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
+    //     tft.println("Internal Error");
+    //   } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
+    //     tft.println("ESP_ERR_ESPNOW_NO_MEM");
+    //   } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
+    //     tft.println("Peer not found.");
+    //   } else {
+    //     tft.println("Not sure what happened");
+    //   }
     // }
-  // delay(1);
+    
+    // delay(5000);
+
+    tft.pushSprite(&screen,0,0);
+    
+
+  }
+
+  frame++;
+  if(frame > 18446744073709551615)frame = 0;
+
+  delay(1);
   
 }

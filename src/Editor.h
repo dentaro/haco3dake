@@ -58,10 +58,10 @@ class Editor {
     int preRx;
     int rowoff;
     int coloff;
-    int screencols;
     int screenrows;
-    int screencol;
+    int screencols;
     int screenrow;
+    int screencol;
     int dirty;
     int numrows;
     erow *row;
@@ -75,7 +75,7 @@ class Editor {
     Editor();
     void editorDrawMessageBar(LovyanGFX& tft, struct abuf *ab);
     void editorDrawStatusBar(LovyanGFX& tft, struct abuf *ab);
-    void initEditor(LovyanGFX& tft);
+    void initEditor(LovyanGFX& tft, int _xpos, int _ypos);
     void readFile(fs::FS &fs, const char * path);
     void editorOpen(fs::FS &fs, const char *filename);
     void editorUpdateRow(erow *row);

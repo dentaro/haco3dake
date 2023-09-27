@@ -1,7 +1,7 @@
 #include <Arduino.h>
 
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
+// #include <WiFi.h>
+// #include <WiFiClientSecure.h>
 #include <FS.h>
 #include <LovyanGFX_DentaroUI.hpp>
 
@@ -28,14 +28,14 @@ extern "C"{
 
 #define BUF_PNG_NUM 0
 
-#define TFT_WIDTH 160//228//256//160
-#define TFT_HEIGHT 128//128//160//120
-#define TFT_WIDTH_HALF 80//114//128//80
-#define TFT_HEIGHT_HALF 64//64//80//60
+#define TFT_WIDTH 160
+#define TFT_HEIGHT 128
+#define TFT_WIDTH_HALF 80
+#define TFT_HEIGHT_HALF 64
 
 #define VEC_FRAME_COUNT 10
 
-#define STARS_NUM 500
+#define STARS_NUM 1
 
 struct Intersection {
     float x;

@@ -11,7 +11,7 @@ extern void setFileName(String s);
 extern void runFileName(String s);
 extern bool isWifiDebug();
 extern void reboot();
-extern Tunes tunes;
+// extern Tunes tunes;
 extern int pressedBtnID;
 extern LovyanGFX_DentaroUI ui;
 extern int outputMode;
