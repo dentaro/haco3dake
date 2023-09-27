@@ -2,11 +2,16 @@
 haco3 on ichigo dyhook
 
 esp32で動き、lua5.3でプログラミングできる開発環境Haco3を、ichigodyhookで動かすためにhaco3dakeを作っています。
+
 エディタはkiloを改造したものです。
+
+ichigo dyhookの本来の使用法からは外れますので、非破壊ですが、改造目的での自己責任でお願いします。
 
 https://twitter.com/oRLF6nXrMai7KiK
 
 基板も作って頒布する予定ですが、回路は結構簡単なのですぐに自作できると思います。
+
+ichigodyhook側の３．３Vでもなぜか動きますが、WiFiやESP‐NOWなどの通信時は5Vをesp32側から入れないと安定しないようです。
 
 コンポジット映像端子と、PS２キーボードがあれば、ichigodyhookがなくても使えると思います。
 
