@@ -42,21 +42,6 @@ int Editor::editorRowCxToRx(erow *row, int cx) {
   return rx-1; // 行の表示位置(rx)を返す
 }
 
-
-// int getMBCLength(const char* str) {
-//   if ((*str & 0x80) == 0) {
-//     return 1; // 1バイト文字
-//   } else if ((*str & 0xE0) == 0xC0) {
-//     return 2; // 2バイト文字
-//   } else if ((*str & 0xF0) == 0xE0) {
-//     return 3; // 3バイト文字
-//   } else if ((*str & 0xF8) == 0xF0) {
-//     return 4; // 4バイト文字
-//   }
-//   return 0; // 不明な形式の文字
-// }
-
-
 void Editor::editorScroll() {
   if(firstBootF){
     E.rx = 0; // カーソル位置(rx)を初期化
@@ -830,12 +815,8 @@ void Editor::setCursor(int _cx,int _cy,int _rx) {
     // setCursorConfig();//外部ファイルに保存
 }
 
-void Editor::initEditor(LovyanGFX& tft, int _rows, int _cols) {
+void Editor::initEditor(LovyanGFX& tft) {
   
-// Serial.print(appfileName);
-// Serial.print(":");
-// Serial.println(savedAppfileName);
-
   if(!difffileF){
     getCursorConfig("/init/param/editor.txt");//カーソル位置を取得
     delay(50);
@@ -845,14 +826,10 @@ void Editor::initEditor(LovyanGFX& tft, int _rows, int _cols) {
     E.rx = 0;
   }
 
-  // if(firstBootF){
-  //   setCursor(0,0,0);
-  // }
-  
   E.rowoff = 0;
   E.coloff = 0;
-  E.screenrows = _rows;//11;
-  E.screencols = _cols;//26;
+  E.screenrows = EDITOR_ROWS;//11;
+  E.screencols = EDITOR_COLS;//26;
   E.numrows = 0;
   E.row = NULL;
   E.dirty = 0;

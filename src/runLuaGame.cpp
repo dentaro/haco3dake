@@ -1,6 +1,6 @@
 #include "runLuaGame.h"
 extern MyTFT_eSprite tft;
-extern LGFX_Sprite sprite64;
+// extern LGFX_Sprite sprite64;
 extern LGFX_Sprite sprite256[2][2];
 extern LGFX_Sprite sprite88_roi;
 extern String appfileName;
@@ -9,7 +9,8 @@ extern void setFileName(String s);
 extern bool isWifiDebug();
 extern void readMap();
 extern void reboot();
-extern Tunes tunes;
+extern void reboot(String _fileName, int _isEditMode);
+// extern Tunes tunes;
 extern int pressedBtnID;
 extern LovyanGFX_DentaroUI ui;
 extern int outputMode;
@@ -33,13 +34,19 @@ extern void getOpenConfig(String _wrfile);
 extern std::deque<int> buttonState;//ボタンの個数未定
 
 extern void restart(String _fileName, int _isEditMode);
+extern int getcno2tftc(uint8_t _cno);
 
 extern char keychar;
 extern Editor editor;
 
+extern uint8_t mainVol;
+
 extern String savedAppfileName;
 extern bool difffileF;//前と違うファイルを開こうとしたときに立つフラグ
 
+extern Speaker_Class speaker;
+
+extern std::vector<uint8_t> sprite64cnos_vector;
 // extern void getOpenConfig(String _wrfile);
 
 int cursor = 0;
@@ -226,20 +233,75 @@ int RunLuaGame::loadSurface(File *fp, uint8_t* buf){
 //   return 1;//１にしないといけない（duk_pushでJSに値をリターンできる
 // }
 
+int RunLuaGame::l_vol(lua_State* L){
+  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int v = lua_tointeger(L, 1);//チャンネル?
+  mainVol = v;
+  return 0;
+}
+
 int RunLuaGame::l_tone(lua_State* L){
   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
-  int n = lua_tointeger(L, 1);
-  int f = lua_tointeger(L, 2);
-  int sl = lua_tointeger(L, 3);
+  int n = lua_tointeger(L, 1);//チャンネル?
+  int f = lua_tointeger(L, 2);//周波数
+  int sl = lua_tointeger(L, 3);//音の長さ
 
+  // if(sl!=0){
+    // speaker.begin();
+    // speaker.setVolume(255);
+    // speaker.setChannelVolume(0, 255);
+    // speaker.tone(f,sl);
+    // delay(sl);
+    // speaker.stop();
+  // }
+  // ledcWriteTone(n, 0);    // 消音
+
+  /// tone data (8bit unsigned wav)
+  //ノイズ音
+
+  // const uint8_t wavdata[64] PROGMEM = { 132,138,143,154,151,139,138,140,144,147,147,147,151,159,184,194,203,222,228,227,210,202,197,181,172,169,177,178,172,151,141,131,107,96,87,77,73,66,42,28,17,10,15,25,55,68,76,82,80,74,61,66,79,107,109,103,81,73,86,94,99,112,121,129 };
+  //サイン波
+//   const uint8_t wavdata[64] PROGMEM = {
+//   128, 141, 153, 164, 175, 185, 194, 202, 209, 215, 220, 224, 227, 229, 230, 229, 
+//   228, 225, 222, 217, 212, 206, 199, 192, 184, 176, 167, 157, 147, 137, 126, 115, 
+//   104,  93,  82,  71,  60,  50,  40,  31,  23,  16,  10,   5,   2,   0,   0,   2,  
+//     5,  10,  16,  23,  31,  40,  50,  60,  71,  82,  93, 104, 115, 126, 137, 147
+// };
+
+
+//三角波
+//   const uint8_t wavdata[64] PROGMEM = {
+//   128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 
+//   255, 247, 239, 231, 223, 215, 207, 199, 191, 183, 175, 167, 159, 151, 143, 135, 
+//   128, 120, 112, 104,  96,  88,  80,  72,  64,  56,  48,  40,  32,  24,  16,   8,  
+//     0,    8,  16,  24,  32,  40,  48,  56,  64,  72,  80,  88,  96, 104, 112, 120
+// };
+
+//矩形波
+  const uint8_t wavdata[64] PROGMEM = {
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
+  };
+
+speaker.setVolume(mainVol);//151が出力限界か？
+
+if(sl!=0){
   if(sl!=0){
+  // speaker.tone(f, sl, 0, true, wavdata, sizeof(wavdata));
+  // speaker.tone(f, sl, 0);//チャンネル０
+  // speaker.tone(f/2, sl, 1);//チャンネル1
+  // speaker.tone(f*2, sl, 2);//チャンネル2
+  speaker.tone(f, sl, 0, true, wavdata, sizeof(wavdata));//チャンネル0
+  // speaker.tone(f*2, sl, 1, true, wavdata, sizeof(wavdata));//チャンネル1
 
-    ledcWriteTone(n, f);
-    delay(sl);
-    ledcWriteTone(n, 0);    // 消音
+  while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+  speaker.stop();
 
   }
-  // ledcWriteTone(n, 0);    // 消音
+}
+
 
   // toneflag = true;
 
@@ -271,14 +333,60 @@ int RunLuaGame::l_spr(lua_State* L){
   int sx = lua_tointeger(L, 5);
   int sy = lua_tointeger(L, 6);
 
-  for(int j=0;j<h/8;j++){
-      for(int i=0;i<w/8;i++){
-      sprite64.pushSprite(&sprite88_roi, -(sx+(i*8)), -(sy+(j*8)));//128*128のpngデータを指定位置までずらす
-      sprite88_roi.pushSprite(&tft, x+(i*8), y+(j*8), TFT_BLACK);//16*16で切り抜き&tftに書き出し：黒を透明に
+  sx  /= 8;
+  sy  /= 8;
+  // int n = lua_tointeger(L, 1);
+  // int x = lua_tointeger(L, 2);
+  // int y = lua_tointeger(L, 3);
+  // int gw = lua_tointeger(L, 4);
+  // int gh = lua_tointeger(L, 5);
+  // int scalex = lua_tointeger(L, 6);
+  // int scaley = lua_tointeger(L, 7);
+  // int angle = lua_tointeger(L, 8);
+
+  // sprite64.pushRotateZoom(&tft, x, y, 0, 1, 1, TFT_BLACK);
+  // sprite64.pushSprite(&tft, x, y);
+  
+  sprite88_roi.clear();//指定の大きさにスプライトを作り直す
+  sprite88_roi.createSprite(w,h);
+
+  int spr8numX = 8;//スプライトシートに並ぶｘ、ｙの個数
+  int spr8numY = 8;
+
+//キャラスプライト
+  for(int y=0;y<8;y++){
+      for(int x=0;x<8;x++){
+        uint8_t bit4;
+        int sprpos;
+        //sprite64cnos[(sy*8) * PNG_SPRITE_WIDTH + (sx*8) 取得スタート位置
+        //y*PNG_SPRITE_WIDTH + xスプライトのピクセル取得
+        sprpos = (sy*8*PNG_SPRITE_WIDTH+sx*8 + y*PNG_SPRITE_WIDTH + x)/2;//４ビット二つで８ビットに入れてるので1/2に
+        bit4 = sprite64cnos_vector[sprpos];
+        if(x%2 == 1)bit4 = (bit4 & 0b00001111);
+        if(x%2 == 0)bit4 = (bit4 >> 4);
+        sprite88_roi.drawPixel(x,y, getcno2tftc(bit4));
       }
   }
+
+  // sprite88_roi.setPivot(w/2.0, h/2.0);
+  // sprite88_roi.pushRotateZoom(&tft, x, y, 0, 1, 1, TFT_BLACK);
+  sprite88_roi.pushSprite(&tft, x, y);//4ずれない
+  // sprite88_roi.pushRotateZoom(&tft, roix+n*8+4, roiy+m*8+4, 0, 1, 1, TFT_BLACK);//なぜか４を足さないとずれる(setPivot?)
+
+
+  // if(scalex == NULL && scaley==NULL && angle == NULL){
+  //   sprite88_roi.pushRotateZoom(&tft, x, y, 0, 1, 1, TFT_BLACK);
+  // }else  if(scalex != NULL && scaley!=NULL && angle == NULL){
+  //   sprite88_roi.pushRotateZoom(&tft, x, y, 0, scalex, scaley, TFT_BLACK);
+  // }else  if(scalex != NULL && scaley!=NULL && angle != NULL){
+  //   sprite88_roi.pushRotateZoom(&tft, x, y, angle, scalex, scaley, TFT_BLACK);
+  // }
+
   return 0;
 }
+
+
+
 int RunLuaGame::l_scroll(lua_State* L){
   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int x = lua_tointeger(L, 1);
@@ -369,6 +477,9 @@ int RunLuaGame::l_text(lua_State* L){
   tft.print(text);
   return 0;
 }
+
+
+
 
 int RunLuaGame::l_opmode(lua_State* L){//FAST,WIDE
   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
@@ -849,6 +960,14 @@ int RunLuaGame::l_phbtn(lua_State* L){
   return 1;
 }
 
+
+int RunLuaGame::l_key(lua_State* L){
+  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+  lua_pushstring(L, &keychar);
+  return 1;
+}
+
 int RunLuaGame::l_btn(lua_State* L){
   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int n = lua_tointeger(L, 1);
@@ -973,7 +1092,9 @@ int RunLuaGame::l_appmode(lua_State* L){//ファイル名を取得して、そ�
 
   // appfileName = file;//開くファイルを更新しておく
 
-  restart(file, modeno);
+  if(modeno==2){setOpenConfig(file,2);delay(100);reboot(file, modeno);}
+  else {restart(file, modeno);}
+  
   return 0;
 }
 
@@ -1400,6 +1521,10 @@ luaL_openlibs(L);
   // lua_setglobal(L, "tstat");
 
   lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_vol, 1);
+  lua_setglobal(L, "vol");
+
+  lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_tone, 1);
   lua_setglobal(L, "tone");
 
@@ -1470,6 +1595,10 @@ luaL_openlibs(L);
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_phbtn, 1);
   lua_setglobal(L, "phbtn");
+  
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_key, 1);
+  lua_setglobal(L, "key");
 
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_btn, 1);

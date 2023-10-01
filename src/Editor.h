@@ -11,13 +11,14 @@
 #define KILO_TAB_STOP 2
 #define ABUF_INIT {NULL, 0}
 
+//メモリが足りない場合に、エディタの表示文字列を少なくする
+#define EDITOR_ROWS 11
+#define EDITOR_COLS 20
+
 class Editor {
 
   private:
   String statusMessage = "";
-  // int preCx =4;
-  // int preCy =4;
-  // int preRx =4;
 
   int keyMillis = 0;
   int keywaitTime = 200;
@@ -75,7 +76,7 @@ class Editor {
     Editor();
     void editorDrawMessageBar(LovyanGFX& tft, struct abuf *ab);
     void editorDrawStatusBar(LovyanGFX& tft, struct abuf *ab);
-    void initEditor(LovyanGFX& tft, int _xpos, int _ypos);
+    void initEditor(LovyanGFX& tft);
     void readFile(fs::FS &fs, const char * path);
     void editorOpen(fs::FS &fs, const char *filename);
     void editorUpdateRow(erow *row);
@@ -88,10 +89,7 @@ class Editor {
     void abAppend(struct abuf *ab, const char *s, int len);
     void abFree(struct abuf *ab);
 
-    // void editorProcessKeypress(int c, fs::FS &fs, fs::FS &SD);
     void editorProcessKeypress(int c, fs::FS &fs);
-    // void editorProcessKeypress(int c);
-    // void editorMoveCursor(int key);
     void editorInsertChar(int c);
     void editorMoveCursor(int c);
     void editorRowInsertChar(erow *row, int at, int c);

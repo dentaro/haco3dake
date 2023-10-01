@@ -2,22 +2,40 @@
 #include <FS.h>
 #include "SPIFFS.h"
 #include "haco8/runHaco8Game.h"
-#include "Tunes.h"
+// #include "Tunes.h"
 #include "KbdRptParser.h"
 #include "Editor.h"
 #include <PS2Keyboard.h>
+#include "Speaker_Class.hpp"
 #include <esp_now.h>
 #include <WiFi.h>
 #include <LovyanGFX_DentaroUI.hpp>
 #include <map>
 
+/// 8bit unsigned 44.1kHz mono (exclude wav header)
+// extern const uint8_t wav_unsigned_8bit_click[46000];
+// extern const uint8_t wav_unsigned_8bit_click[16];
+
+/// wav data (include wav header)
+// extern const uint8_t wav_with_header[230432];
+// extern const uint8_t wav_with_header[16];
+
+static int menu_x = 2;
+static int menu_y = 20;
+static int menu_w = 120;
+static int menu_h = 30;
+static int menu_padding = 36;
+
 #define KEYBOARD_DATA 32
 #define KEYBOARD_CLK  33
+
 #define TFT_RUN_MODE 0
 #define TFT_EDIT_MODE 1
 #define TFT_WIFI_MODE 2
 
 PS2Keyboard keyboard;
+
+Speaker_Class speaker;
 
 uint64_t frame = 0;
 
@@ -54,6 +72,8 @@ using namespace std;
 #define FORMAT_SPIFFS_IF_FAILED true
 
 #define BUF_PNG_NUM 0
+
+uint8_t mainVol = 180;
 
 //outputmode最終描画の仕方
 // int outputMode = FAST_MODE;//50FPS程度128*128 速いけど小さい画面　速度が必要なモード
@@ -92,7 +112,6 @@ const uint8_t RGBValues[][3] PROGMEM = {//16bit用
   {255, 203, 165}  // 15: 桃色
 };
 
-
   static constexpr int HACO3_C0    = 0x0000;
   static constexpr int HACO3_C1    = 6474;//27,42,86 
   static constexpr int HACO3_C2    = 35018;
@@ -122,6 +141,10 @@ LGFX_Sprite tft(&screen);
 LGFX_Sprite sprite88_roi = LGFX_Sprite(&tft);
 LGFX_Sprite sprite11_roi = LGFX_Sprite(&tft);
 LGFX_Sprite sprite64 = LGFX_Sprite();
+// uint8_t sprite64cnos[4096];//64*64
+
+// uint8_t sprite64cnos[PNG_SPRITE_HEIGHT * PNG_SPRITE_WIDTH];//64*128
+std::vector<uint8_t> sprite64cnos_vector;
 
 LGFX_Sprite buffSprite = LGFX_Sprite(&tft);
 
@@ -131,7 +154,7 @@ LGFX_Sprite sprite88_0 = LGFX_Sprite(&tft);
 // static LGFX_Sprite sliderSprite( &tft );//スライダ用
 
 BaseGame* game;
-Tunes tunes;
+// Tunes tunes;
 String appfileName = "";//最初に実行されるアプリ名
 String savedAppfileName = "";
 // String txtName = "/init/txt/sample.txt";//実行されるファイル名
@@ -152,7 +175,7 @@ bool mapready = false;
 int8_t sprbits[128];//fgetでアクセスするスプライト属性を格納するための配列
 
 char buf[MAX_CHAR];
-char str[100];//情報表示用
+// char str[100];//情報表示用
 int mode = 0;//記号モード //0はrun 1はexit
 int gameState = 0;
 String appNameStr = "init";
@@ -287,10 +310,6 @@ void reboot()
   ESP.restart();
 }
 
-
-
-
-
 FileType detectFileType(String *appfileName)
 {
   if(appfileName->endsWith(".js")){
@@ -360,16 +379,36 @@ void runFileName(String s){
 
 }
 
+
+int getcno2tftc(uint8_t _cno){
+  switch (_cno)
+  {
+  case 0:return RunHaco8Game::HACO3_C0;break;
+  case 1:return RunHaco8Game::HACO3_C1;break;
+  case 2:return RunHaco8Game::HACO3_C2;break;
+  case 3:return RunHaco8Game::HACO3_C3;break;
+  case 4:return RunHaco8Game::HACO3_C4;break;
+  case 5:return RunHaco8Game::HACO3_C5;break;
+  case 6:return RunHaco8Game::HACO3_C6;break;
+  case 7:return RunHaco8Game::HACO3_C7;break;
+  case 8:return RunHaco8Game::HACO3_C8;break;
+  case 9:return RunHaco8Game::HACO3_C9;break;
+  case 10:return RunHaco8Game::HACO3_C10;break;
+  case 11:return RunHaco8Game::HACO3_C11;break;
+  case 12:return RunHaco8Game::HACO3_C12;break;
+  case 13:return RunHaco8Game::HACO3_C13;break;
+  case 14:return RunHaco8Game::HACO3_C14;break;
+  case 15:return RunHaco8Game::HACO3_C15;break;
+
+  default:
+  return RunHaco8Game::HACO3_C0;
+    break;
+  }
+}
+
+
 // タイマー
 hw_timer_t * timer = NULL;
-
-// 画面描画タスクハンドル
-// TaskHandle_t taskHandle;
-
-// タイマー割り込み
-// void IRAM_ATTR onTimer() {
-//   xTaskNotifyFromISR(taskHandle, 0, eIncrement, NULL);
-// }
 
 void readFile(fs::FS &fs, const char * path) {
    File file = fs.open(path);
@@ -606,7 +645,7 @@ void restart(String _fileName, int _isEditMode)
   firstBootF = false;
   setup();
 
-  tunes.pause();
+  // tunes.pause();
   game->pause();
   free(game);
   firstLoopF = true;
@@ -616,7 +655,7 @@ void restart(String _fileName, int _isEditMode)
   // txtName = _fileName;
   game = nextGameObject(&_fileName, gameState, mapFileName);//ファイルの種類を判別して適したゲームオブジェクトを生成
   game->init();//resume()（再開処理）を呼び出し、ゲームで利用する関数などを準備
-  tunes.resume();
+  // tunes.resume();
 }
 
 
@@ -658,6 +697,131 @@ void broadchat() {
   editor.editorSetStatusMessage("Message sent");
 }
 
+
+uint8_t readpixel(int i, int j)
+{
+        // int k = j+(MAPWH/divnum)*(n);//マップ下部
+        colValR = sprite64.readPixelRGB(i,j).R8();
+        colValG = sprite64.readPixelRGB(i,j).G8();
+        colValB = sprite64.readPixelRGB(i,j).B8();
+
+  //16ビットRGB（24ビットRGB）
+        if(colValR==0&&colValG==0&&colValB==0){//0: 黒色=なし
+          return 0;//20;
+        }else if(colValR==24&&colValG==40&&colValB==82){//{ 27,42,86 },//1: 暗い青色
+          return 1;//11;//5*8+5;
+        }else if(colValR==140&&colValG==24&&colValB==82){//{ 137,24,84 },//2: 暗い紫色
+          return 2;//32;//5*8+5;
+        }else if(colValR==0&&colValG==138&&colValB==74){//{ 0,139,75 },//3: 暗い緑色
+          return 3;//44;//5*8+5;
+        }else if(colValR==181&&colValG==77&&colValB==41){//{ 183,76,45 },//4: 茶色 
+          return 4;//53;//5*8+5;
+        }else if(colValR==99&&colValG==85&&colValB==74){//{ 97,87,78 },//5: 暗い灰色
+          return 5;//49;
+        }else if(colValR==198&&colValG==195&&colValB==198){//{ 194,195,199 },//6: 明るい灰色
+          return 6;//54;//5*8+5;
+        }else if(colValR==255&&colValG==243&&colValB==231){//{ 255,241,231 },//7: 白色
+          return 7;//32;
+        }else if(colValR==255&&colValG==0&&colValB==66){//{ 255,0,70 },//8: 赤色
+          return 8;//52;
+        }else if(colValR==255&&colValG==162&&colValB==0){//{ 255,160,0 },//9: オレンジ
+          return 9;//41;//5*8+5;
+        }else if(colValR==255&&colValG==239&&colValB==0){//{ 255,238,0 },//10: 黄色
+          return 10;//46;
+        }else if(colValR==0&&colValG==235&&colValB==0){//{ 0,234,0 },//11: 緑色
+          return 11;//42;
+        }else if(colValR==0&&colValG==174&&colValB==255){//{ 0,173,255 },//12: 水色
+          return 12;//45;//5*8+5;
+        }else if(colValR==132&&colValG==117&&colValB==156){//{ 134,116,159 },//13: 藍色
+          return 13;//50;
+        }else if(colValR==255&&colValG==105&&colValB==173){//{ 255,107,169 },//14: ピンク
+          return 14;//43;//5*8+5;
+        }else if(colValR==255&&colValG==203&&colValB==165){//{ 255,202,165}//15: 桃色
+          return 15;//38;//5*8+5;
+        }
+}
+
+
+static void tone_up(bool holding)
+{
+  static int tone_hz;
+  if (!holding) { tone_hz = 100; }
+  speaker.tone(++tone_hz, 1000, 1);
+}
+
+static void bgm_play_stop(bool holding = false)
+{
+  // if (holding) { return; }
+  // if (speaker.isPlaying(0))
+  // {
+  //   speaker.stop(0);
+  // }
+  // else
+  // {
+  //   speaker.playWav(wav_with_header, sizeof(wav_with_header), ~0u, 0, true);
+  // }
+}
+
+static void m_volume_up(bool)
+{
+  int v = speaker.getVolume() + 1;
+  if (v < 256) { speaker.setVolume(v); }
+}
+
+static void m_volume_down(bool)
+{
+  int v = speaker.getVolume() - 1;
+  if (v >= 0) { speaker.setVolume(v); }
+}
+
+static void c_volume_up(bool)
+{
+  int v = speaker.getChannelVolume(0) + 1;
+  if (v < 256) { speaker.setChannelVolume(0, v); }
+}
+
+static void c_volume_down(bool)
+{
+  int v = speaker.getChannelVolume(0) - 1;
+  if (v >= 0) { speaker.setChannelVolume(0, v); }
+}
+
+struct menu_item_t
+{
+  const char* title;
+  void (*func)(bool);
+};
+
+static const menu_item_t menus[] =
+{
+  { "tone"      , tone_up       },
+  { "play/stop" , bgm_play_stop },
+  { "ms vol u"  , m_volume_up   },
+  { "ms vol d"  , m_volume_down },
+  { "ch vol u"  , c_volume_up   },
+  { "ch vol d"  , c_volume_down },
+};
+static constexpr const size_t menu_count = sizeof(menus) / sizeof(menus[0]);
+
+size_t cursor_index = 0;
+
+
+void safeReboot(){
+  editor.setCursorConfig(0,0,0);//カーソルの位置を強制リセット保存
+      delay(50);
+
+      ui.setConstantGetF(false);//初期化処理 タッチポイントの常時取得を切る
+      appfileName = "/init/main.lua";
+      
+      firstLoopF = true;
+      toneflag = false;
+      sfxflag = false;
+      musicflag = false;
+
+      editor.editorSave(SPIFFS);//SPIFFSに保存
+      delay(100);//ちょっと待つ
+      reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
+}
 
 void setup()
 {
@@ -719,10 +883,34 @@ void setup()
 
     sprite64.setPsram(false );
     sprite64.setColorDepth(16);//子スプライトの色深度
-    sprite64.createSprite(64, 64);//ゲーム画面用スプライトメモリ確保//wroomだと64*128だとメモリオーバーしちゃう
+    sprite64.createSprite(PNG_SPRITE_WIDTH, PNG_SPRITE_HEIGHT);//ゲーム画面用スプライトメモリ確保//wroomだと64*128だとメモリオーバーしちゃう問題を色番号配列にして回避した
 
-    sprite64.drawPngFile(SPIFFS, "/init/initspr.png", 0, 0);
-    
+    sprite64.drawPngFile(SPIFFS, "/init/initspr.png", 0, 0);//一時展開する
+
+
+    //色番号配列化
+    // for(int y=0;y<PNG_SPRITE_HEIGHT;y++){
+    //   for(int x=0;x<PNG_SPRITE_WIDTH;x++){
+    //     if(x%2 == 0){
+    //       sprite64cnos[(y*PNG_SPRITE_WIDTH+x)] = (readpixel(x  , y) << 4) | (readpixel(x+1, y) & 0b00001111);//ニコイチにして格納
+    //     }
+    //   }
+    // }
+
+    sprite64cnos_vector.clear();//初期化処理
+
+    for(int y = 0; y < PNG_SPRITE_HEIGHT; y++) {
+        for(int x = 0; x < PNG_SPRITE_WIDTH; x++) {
+          if(x%2 == 0){
+            uint8_t pixel_data = (readpixel(x, y) << 4) | (readpixel(x + 1, y) & 0b00001111);
+            sprite64cnos_vector.push_back(pixel_data);
+          }
+        }
+    }
+
+    //破棄
+    sprite64.deleteSprite();
+
     //psram使えない-------------------------------------------
     // buffSprite.setPsram( true );
     // buffSprite.setColorDepth(16);//子スプライトの色深度
@@ -767,7 +955,7 @@ void setup()
 
       game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
       game->init();//（オブジェクト生成している）
-      tunes.init();//（オブジェクト生成している）
+      // tunes.init();//（オブジェクト生成している）
     }
 
     frame=0;
@@ -802,17 +990,16 @@ void setup()
       createAbsUI();
       game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
       game->init();//（オブジェクト生成している）
-      tunes.init();//（オブジェクト生成している）
+      // tunes.init();//（オブジェクト生成している）
 
       frame=0;
 
-      editor.initEditor(tft,11, 22);
+      // editor.initEditor(tft, EDITOR_ROWS, EDITOR_COLS);
+      editor.initEditor(tft);
       editor.readFile(SPIFFS, appfileName.c_str());
       editor.editorOpen(SPIFFS, appfileName.c_str());
       editor.editorSetStatusMessage("Press ESCAPE to save file");
-
     }
-
   }
   else if(isEditMode == TFT_WIFI_MODE)
   {
@@ -849,11 +1036,12 @@ void setup()
       createAbsUI();
       game = nextGameObject(&appfileName, gameState, mapFileName);//ホームゲームを立ち上げる（オブジェクト生成している）
       game->init();//（オブジェクト生成している）
-      tunes.init();//（オブジェクト生成している）
+      // tunes.init();//（オブジェクト生成している）
 
       frame=0;
 
-      editor.initEditor(tft, 11, 22);//11行25文字
+      //editor.initEditor(tft, EDITOR_ROWS, EDITOR_COLS);
+      editor.initEditor(tft);
       editor.readFile(SPIFFS, "/init/chat/m.txt");
       editor.editorOpen(SPIFFS, "/init/chat/m.txt");
       editor.editorSetStatusMessage("Press ESCAPE to save file");
@@ -889,6 +1077,135 @@ void setup()
   }
   savedAppfileName = appfileName;//起動したゲームのパスを取得しておく
   firstBootF = false;
+
+  screen.setCursor(0,0);
+  screen.fillScreen(TFT_RED);
+  screen.setTextSize(1);//サイズ
+  screen.setFont(&lgfxJapanGothicP_8);//日本語可
+  // screen.setTextWrap(true);
+  // screen.setClipRect(160, 0, 60, 128);
+  screen.println("HELP");
+  screen.println("qで音量をあげる");
+  screen.println("aで音量をさげる");
+
+  
+  // begin(cfg);
+
+  // { /// I2S Custom configurations are available if you desire.
+  //   auto spk_cfg = speaker.config();
+
+  //   if (spk_cfg.use_dac || spk_cfg.buzzer)
+  //   {
+  //   /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
+  //     spk_cfg.sample_rate = 64000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
+  //   }
+
+  //   speaker.config(spk_cfg);
+  // }
+
+  speaker.begin();
+
+  //  The setVolume function can be set the master volume in the range of 0-255. (default : 64)
+  speaker.setVolume(255);
+
+  /// The setAllChannelVolume function can be set the all virtual channel volume in the range of 0-255. (default : 255)
+  speaker.setAllChannelVolume(255);
+
+  /// The setChannelVolume function can be set the specified virtual channel volume in the range of 0-255. (default : 255)
+  speaker.setChannelVolume(0, 255);
+
+  /// play do Hz tone sound, 100 msec. 
+  speaker.tone(2000, 100,1);
+
+  delay(100);
+
+  /// play mi Hz tone sound, 100 msec. 
+  speaker.tone(1000, 100,2);
+
+  delay(100);
+
+  
+  /// stop output sound.
+  speaker.stop();
+
+  // delay(500);
+
+  // speaker.playRaw( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
+
+  // while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  // // The 2nd argument of the tone function can be used to specify the output time (milliseconds).
+  // speaker.tone(440, 1000);  // 440Hz sound  output for 1 seconds.
+
+  // while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  // speaker.setVolume(0);
+  // speaker.tone(880);  // tone 880Hz sound output. (Keeps output until it stops.)
+  // for (int i = 0; i <= 151; i++)
+  // {
+  //   speaker.setVolume(i); // Volume can be changed during sound output.
+  //   delay(25);
+  // }
+  // speaker.stop();  // stop sound output.
+
+  // delay(500);
+
+  // //---------------------------------------------
+
+  // // The tone function can specify a virtual channel number as its 3rd argument.
+  // // If the tone function is used on the same channel number, the previous tone will be stopped and a new tone will be played.
+  // speaker.tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
+  // delay(200);
+  // speaker.tone(329.628, 1000, 1);  // tone 329.628Hz  output for 1 seconds, use channel 1
+  // delay(200);
+  // speaker.tone(391.995, 1000, 1);  // tone 391.995Hz  output for 1 seconds, use channel 1
+
+  // while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  // // By specifying different channels, multiple sounds can be output simultaneously.
+  // speaker.tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
+  // delay(200);
+  // speaker.tone(329.628, 1000, 2);  // tone 329.628Hz  output for 1 seconds, use channel 2
+  // delay(200);
+  // speaker.tone(391.995, 1000, 3);  // tone 391.995Hz  output for 1 seconds, use channel 3
+
+  // while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  /// tone data (8bit unsigned wav)
+  // const uint8_t wavdata[64] = { 132,138,143,154,151,139,138,140,144,147,147,147,151,159,184,194,203,222,228,227,210,202,197,181,172,169,177,178,172,151,141,131,107,96,87,77,73,66,42,28,17,10,15,25,55,68,76,82,80,74,61,66,79,107,109,103,81,73,86,94,99,112,121,129 };
+
+  // /// Using a single wave of data, you can change the tone.
+  // speaker.tone(261.626, 1000, 1, true, wavdata, sizeof(wavdata));
+  // delay(200);
+  // speaker.tone(329.628, 1000, 2, true, wavdata, sizeof(wavdata));
+  // delay(200);
+  // speaker.tone(391.995, 1000, 3, true, wavdata, sizeof(wavdata));
+  // delay(200);
+
+  // while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  bgm_play_stop(true);
+
+
+  //キー取得
+  //luaプログラムがバグで起動不能になった場合、ESCを押しながらリセットをかけると、メニューに戻れるようにする
+  //ESCボタンで強制終了
+
+  if (keyboard.available()) {
+    keychar = keyboard.read();
+    if (keychar == PS2_ESC) {
+      safeReboot();
+    }
+  }
+  
 }
 
 void loop()
@@ -936,8 +1253,9 @@ void loop()
     // }
   
   }else{//キーアップの時など押されていないとき
-  if(pressedBtnID!=-1)buttonState[pressedBtnID] = -1;
-    pressedBtnID = -1;//リセット    
+    keychar = NULL;
+    if(pressedBtnID!=-1){buttonState[pressedBtnID] = -1;}
+      pressedBtnID = -1;//リセット    
   }
 
   editor.editorRefreshScreen(tft);
@@ -965,12 +1283,12 @@ void loop()
     tft.setTextWrap(true);
 
     // == tune task ==
-    tunes.run();
+    // tunes.run();
 
     // == game task ==
     mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
 
-    //0ボタンで強制終了
+    //ESCボタンで強制終了
     if (pressedBtnID == 0)
     { // reload
 
@@ -985,10 +1303,6 @@ void loop()
       sfxflag = false;
       musicflag = false;
 
-      // getOpenConfig("/init/param/openconfig.txt");
-      
-      // game->setWifiDebugRequest(false);//外部ファイルから書き換えてWifiモードにできる
-      // game->setWifiDebugSelf(false);
       mode = 1;//exit
     }
 
@@ -1000,7 +1314,7 @@ void loop()
     }
 
     if(mode != 0){ // exit request//次のゲームを立ち上げるフラグ値、「modeが１＝次のゲームを起動」であれば
-      tunes.pause();
+      // tunes.pause();
       game->pause();
       // ui.clearAddBtns();//個別のゲーム内で追加したタッチボタンを消去する
       free(game);
@@ -1011,7 +1325,7 @@ void loop()
       // txtName = appfileName;
       game = nextGameObject(&appfileName, gameState, mapFileName);//ファイルの種類を判別して適したゲームオブジェクトを生成
       game->init();//resume()（再開処理）を呼び出し、ゲームで利用する関数などを準備
-      tunes.resume();
+      // tunes.resume();
       
     }
 
@@ -1024,7 +1338,7 @@ void loop()
 
       //Affineを使わない書き方
       tft.setPivot(0, 0);
-      tft.pushRotateZoom(&screen, 0, 0, 0, 1, 1);
+      tft.pushRotateZoom(&screen, 60, 0, 0, 1, 1);
     }
     else if(outputMode == FAST_MODE){
       tft.pushSprite(&screen,TFT_OFFSET_X,TFT_OFFSET_Y);//ゲーム画面を小さく高速描画する
@@ -1049,7 +1363,7 @@ void loop()
     if(codeunit>=1){tft.fillRect(155, int(curpos), 4, codeunit, HACO3_C8);}//コードの位置と範囲を表示
     else{tft.fillRect(155, int(curpos), 4, 1, HACO3_C8);}//１ピクセル未満の時は見えなくなるので１に
     
-    tft.pushSprite(&screen,0,0);
+    tft.pushSprite(&screen, 60, 0);
     
     if(pressedBtnID == 0)//ESC
     {
@@ -1062,20 +1376,20 @@ void loop()
       editor.editorSave(SPIFFS);//SPIFFSに保存
       delay(100);//ちょっと待つ
       reboot(appfileName, TFT_RUN_MODE);//現状rebootしないと初期化が完全にできない
-      // restart(appfileName, 0);
+      // restart(appfileName, 0);//初期化がうまくできない（スプライトなど）
       // broadchat();//ファイルの中身をブロードキャスト送信する（ファイルは消えない）
     }
 
   }
   else if(isEditMode == TFT_WIFI_MODE)
   {
-  
-    if(pressedBtnID == 0)//ESC
-    {
-      editor.setCursorConfig(0,0,0);//カーソルの位置を保存
-      delay(50);
-      restart("/init/main.lua", 0);
+
+    //ESCボタンで強制終了
+    if (pressedBtnID == 0)
+    { // reload
+      safeReboot();
     }
+
 
     tft.setTextSize(1);//サイズ
     tft.setFont(&lgfxJapanGothicP_8);//日本語可
@@ -1083,38 +1397,14 @@ void loop()
     tft.setTextWrap(true);
     tft.setTextScroll(true);
 
+
     if(pressedBtnID == 6){//PAGEDOWN
       editor.editorSave(SPIFFS);//SPIFFSに保存
       delay(100);//ちょっと待つ
       broadchat();
     }
-    
-    // if(pressedBtnID == 2){//>ボタンが押されたら送信
-    //   uint8_t data[13] = {'H', 'A', 'C', 'O', '3', 32, 69, 83, 80, 45, 78, 79, 87};
-    //   esp_err_t result = esp_now_send(slave.peer_addr, data, sizeof(data));
-    //   tft.print("Send Status: ");
-    //   if (result == ESP_OK) {
-    //     tft.println("Success");
-    //   } else if (result == ESP_ERR_ESPNOW_NOT_INIT) {
-    //     tft.println("ESPNOW not Init.");
-    //   } else if (result == ESP_ERR_ESPNOW_ARG) {
-    //     tft.println("Invalid Argument");
-    //   } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
-    //     tft.println("Internal Error");
-    //   } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
-    //     tft.println("ESP_ERR_ESPNOW_NO_MEM");
-    //   } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
-    //     tft.println("Peer not found.");
-    //   } else {
-    //     tft.println("Not sure what happened");
-    //   }
-    // }
-    
-    // delay(5000);
 
-    tft.pushSprite(&screen,0,0);
-    
-
+    tft.pushSprite(&screen,60,0);
   }
 
   frame++;

@@ -1,6 +1,6 @@
 #include "runHaco8Game.h"
 extern MyTFT_eSprite tft;
-extern LGFX_Sprite sprite64;
+// extern LGFX_Sprite sprite64;
 // extern LGFX_Sprite sprite256[BUF_PNG_NUM];
 extern LGFX_Sprite sprite88_roi;
 extern LGFX_Sprite buffSprite;
@@ -11,6 +11,7 @@ extern void setFileName(String s);
 extern void runFileName(String s);
 extern bool isWifiDebug();
 extern void reboot();
+extern int getcno2tftc(uint8_t _cno);
 // extern Tunes tunes;
 extern int pressedBtnID;
 extern LovyanGFX_DentaroUI ui;
@@ -46,6 +47,8 @@ extern Vector3<float> currentPos;
 extern Vector3<float> diffPos;
 extern int dirNos[9];
 
+// extern uint8_t sprite64cnos[PNG_SPRITE_WIDTH*PNG_SPRITE_HEIGHT];//64*128
+extern std::vector<uint8_t> sprite64cnos_vector;
 // #include "MapDictionary.h"//直前で読み込まないとexternできない
 // extern MapDictionary dict;
 
@@ -347,6 +350,32 @@ int RunHaco8Game::l_mget(lua_State* L){
   return 1;
 }
 
+// int getcno2tftc(uint8_t _cno){
+//   switch (_cno)
+//   {
+//   case 0:return RunHaco8Game::HACO3_C0;break;
+//   case 1:return RunHaco8Game::HACO3_C1;break;
+//   case 2:return RunHaco8Game::HACO3_C2;break;
+//   case 3:return RunHaco8Game::HACO3_C3;break;
+//   case 4:return RunHaco8Game::HACO3_C4;break;
+//   case 5:return RunHaco8Game::HACO3_C5;break;
+//   case 6:return RunHaco8Game::HACO3_C6;break;
+//   case 7:return RunHaco8Game::HACO3_C7;break;
+//   case 8:return RunHaco8Game::HACO3_C8;break;
+//   case 9:return RunHaco8Game::HACO3_C9;break;
+//   case 10:return RunHaco8Game::HACO3_C10;break;
+//   case 11:return RunHaco8Game::HACO3_C11;break;
+//   case 12:return RunHaco8Game::HACO3_C12;break;
+//   case 13:return RunHaco8Game::HACO3_C13;break;
+//   case 14:return RunHaco8Game::HACO3_C14;break;
+//   case 15:return RunHaco8Game::HACO3_C15;break;
+
+//   default:
+//   return RunHaco8Game::HACO3_C0;
+//     break;
+//   }
+// }
+
 int RunHaco8Game::l_spr8(lua_State* L){
   RunHaco8Game* self = (RunHaco8Game*)lua_touserdata(L, lua_upvalueindex(1));
   int n = lua_tointeger(L, 1);
@@ -358,9 +387,7 @@ int RunHaco8Game::l_spr8(lua_State* L){
   int scaley = lua_tointeger(L, 7);
   int angle = lua_tointeger(L, 8);
 
-
   // sprite64.pushRotateZoom(&tft, x, y, 0, 1, 1, TFT_BLACK);
-
   // sprite64.pushSprite(&tft, x, y);
 
   if( gw==NULL && gh==NULL )
@@ -381,7 +408,20 @@ int RunHaco8Game::l_spr8(lua_State* L){
   int sx = ((n-1)%spr8numX); //0~7
   int sy = ((n-1)/spr8numY); //整数の割り算はintにいれると切り捨てされる
 
-  sprite64.pushSprite(&sprite88_roi, -(sx*8), -(sy*8));//64*64のpngデータを指定位置までずらす
+//キャラスプライト
+  for(int y=0;y<8;y++){
+      for(int x=0;x<8;x++){
+        uint8_t bit4;
+        int sprpos;
+        //sprite64cnos[(sy*8) * PNG_SPRITE_WIDTH + (sx*8) 取得スタート位置
+        //y*PNG_SPRITE_WIDTH + xスプライトのピクセル取得
+        sprpos = (sy*8*PNG_SPRITE_WIDTH+sx*8 + y*PNG_SPRITE_WIDTH + x)/2;//４ビット二つで８ビットに入れてるので1/2に
+        bit4 = sprite64cnos_vector[sprpos];
+        if(x%2 == 1)bit4 = (bit4 & 0b00001111);
+        if(x%2 == 0)bit4 = (bit4 >> 4);
+        sprite88_roi.drawPixel(x,y, getcno2tftc(bit4));
+      }
+  }
 
   sprite88_roi.setPivot(w/2.0, h/2.0);
 
@@ -419,12 +459,46 @@ int RunHaco8Game::l_map(lua_State* L){
   for(int m=0;m<roiH;m++){
       for(int n=0;n<roiW;n++){
           int sprno = mapArray[my+n][mx+m];
-          
+
             int sx = ((sprno-1)%spr8numX); //0~7
             int sy = ((sprno-1)/spr8numY); //整数の割り算は自動で切り捨てされる
-            sprite64.pushSprite(&sprite88_roi, -8*(sx), -8*(sy));//128*128のpngデータを指定位置までずらすsprite64のスプライトデータ8*8で切り抜く
+            // sprite64.pushSprite(&sprite88_roi, -8*(sx), -8*(sy));//128*128のpngデータを指定位置までずらすsprite64のスプライトデータ8*8で切り抜く
+
+            for(int y=0;y<8;y++){
+                for(int x=0;x<8;x++){
+                  uint8_t bit4;
+                  int sprpos;
+                  //sprite64cnos[(sy*8) * PNG_SPRITE_WIDTH + (sx*8) 取得スタート位置
+                  //y*PNG_SPRITE_WIDTH + xスプライトのピクセル取得
+                  sprpos = (sy*8*PNG_SPRITE_WIDTH+sx*8 + y*PNG_SPRITE_WIDTH + x)/2;
+                  bit4 = sprite64cnos_vector[sprpos];
+                  if(x%2 == 1)bit4 = (bit4 & 0b00001111);
+                  if(x%2 == 0)bit4 = (bit4 >> 4);
+                  sprite88_roi.drawPixel(x,y, getcno2tftc(bit4));
+                }
+            }
+            
+            // for(int y=0;y<8;y++){
+            //   for(int x=0;x<8;x++){
+            //     //sprite64cnos[(sy*8) * PNG_SPRITE_WIDTH + (sx*8) 取得スタート位置
+            //     //y*PNG_SPRITE_WIDTH + xスプライトのピクセル取得
+            //     uint8_t bit4;
+            //     if(sx%2 == 0){
+            //       bit4 = sprite64cnos[(sy*8 * PNG_SPRITE_WIDTH + sx*8 + y*PNG_SPRITE_WIDTH + x)/2];
+            //       //上位４ビットを０マスクする
+            //       bit4 = (bit4 & 0b00001111);
+            //     }else if(sx%2 == 1){
+            //       bit4 = sprite64cnos[(sy*8 * PNG_SPRITE_WIDTH + sx*8 + y*PNG_SPRITE_WIDTH + (x-1))/2];
+            //       //上位４ビットを右にビットシフトして上位を０で埋める
+            //       bit4 = (bit4 >> 4);
+            //     }
+            //     sprite88_roi.drawPixel(x,y, getcno2tftc(bit4));
+            //   }
+            // } 
+
             sprite88_roi.pushSprite(&tft, roix+n*8, roiy+m*8);//4ずれない
             // sprite88_roi.pushRotateZoom(&tft, roix+n*8+4, roiy+m*8+4, 0, 1, 1, TFT_BLACK);//なぜか４を足さないとずれる要修正
+
       }
   }
   return 0;
@@ -3873,9 +3947,9 @@ int RunHaco8Game::l_spmap(lua_State* L) {
         int sy = (sprno - 1) >> 3; // (sprno - 1) / spr8numY と同等
 
         // スプライト内の座標から色を取得する
-        uint16_t color = sprite64.readPixel((sx << 3) + (xx & 7), (sy << 3) + (yy & 7));
+        // uint16_t color = sprite64.readPixel((sx << 3) + (xx & 7), (sy << 3) + (yy & 7));
 
-        tft.drawPixel(mx + wx, my + h - wy, color);
+        // tft.drawPixel(mx + wx, my + h - wy, color);
       }
     }
   }

@@ -15,6 +15,8 @@
 #include <iostream>
 #include <fstream>
 
+#include "Speaker_Class.hpp"
+
 extern "C"{
 #include <lua.h>
 #include <lualib.h>
@@ -101,6 +103,7 @@ class RunLuaGame: public BaseGame
     int loadSurface(File* fp, uint8_t* buf);
     // static int l_tp(lua_State* L);
     // static int l_tstat(lua_State* L);
+    static int l_vol(lua_State* L);
     static int l_tone(lua_State* L);
     static int l_spr(lua_State* L);
     static int l_scroll(lua_State* L);
@@ -119,6 +122,7 @@ class RunLuaGame: public BaseGame
     static int l_drawtri(lua_State* L);
     static int l_filltri(lua_State* L);
     static int l_phbtn(lua_State* L);
+    static int l_key(lua_State* L);
     static int l_btn(lua_State* L);
     static int l_touch(lua_State* L);
     static int l_btnp(lua_State* L);
