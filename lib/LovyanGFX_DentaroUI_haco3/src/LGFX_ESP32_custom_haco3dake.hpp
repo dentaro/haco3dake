@@ -15,15 +15,19 @@ public:
       auto cfg = _panel_instance.config();    // 表示パネル設定用の構造体を取得します。
 
       // 出力解像度を設定;
-      cfg.memory_width  = 220;//260;//164;; // 出力解像度 幅
+      cfg.memory_width  = 223;//260;//164;; // 出力解像度 幅
       cfg.memory_height = 137;//169;//129;; // 出力解像度 高さ
 
       // 実際に利用する解像度を設定;
-      cfg.panel_width  = 160;//256;//160;//208;  // 実際に使用する幅   (memory_width と同値か小さい値を設定する)
+      // cfg.panel_width  = 160;//256;//160;//208;  // 実際に使用する幅   (memory_width と同値か小さい値を設定する)
+      // cfg.panel_height = 128;//160;//120;//128;  // 実際に使用する高さ (memory_heightと同値か小さい値を設定する)
+
+      cfg.panel_width  = 220;//256;//160;//208;  // 実際に使用する幅   (memory_width と同値か小さい値を設定する)
       cfg.panel_height = 128;//160;//120;//128;  // 実際に使用する高さ (memory_heightと同値か小さい値を設定する)
 
       // 表示位置オフセット量を設定;
-      cfg.offset_x = 30;       // 表示位置を右にずらす量 (初期値 0)
+      // cfg.offset_x = 30;       // 表示位置を右にずらす量 (初期値 0)
+      cfg.offset_x = 3;       // 表示位置を右にずらす量 (初期値 0)
       cfg.offset_y = 5;       // 表示位置を下にずらす量 (初期値 0)
 
       _panel_instance.config(cfg);
