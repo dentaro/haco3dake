@@ -17,7 +17,7 @@ ichigodyhook側の３．３Vでもなぜか動きますが、WiFiやESP‐NOWな
 
 ESP-WROOM-32 (D1 Mini)で動くようにplatformIOでメモリ使用量をチューニングしています。
 
-回路図はwroverですが、ピンアサインさえ合わせれば大体どのようなesp32,M5Stackなどでも動くと思います。
+回路図はwroverですが、ボードの種類とピンアサインさえ合わせれば大体お手元にあるesp32,M5Stackなどで動くと思います。
 
 R5,R6は4.7kオーム
 R7,R8は120オームです
