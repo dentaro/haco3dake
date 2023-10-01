@@ -1,1 +1,0 @@
-kon_nitiha! kore ha hacochat desu!
