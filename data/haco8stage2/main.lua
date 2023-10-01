@@ -26,11 +26,11 @@ righttop=0
 leftbottom=0
 rightbottom=0
 
--- s=1 -- スプライト番号
--- d=1 -- 方向を示す                                                                                  
--- ipf=8 -- アニメーション1フレームについての時間(1ipf = 1/30秒)
--- nf=2 -- アニメーションするフレーム数(足踏みは2フレーム)
--- t=0
+s=1 -- スプライト番号
+d=1 -- 方向を示す                                                                                  
+ipf=8 -- アニメーション1フレームについての時間(1ipf = 1/30秒)
+nf=2 -- アニメーションするフレーム数(足踏みは2フレーム)
+t=0
 
 function _init()
   -- ここに書いてもグローバル変数になるようにしたい
@@ -46,29 +46,29 @@ function input()
   local pressed=false
   if (btn(1)>=1) then
    x = x-1
-  --  d=1
+   d=1
    pressed=true
   end
   if (btn(2)>=1) then
     x = x+1
-  --  d=2
+   d=2
    pressed=true
   end
   if (btn(3)>=1) then
    y = y-1
-  --  d=3
+   d=3
    pressed=true
   end
   if (btn(4)>=1) then
    y = y+1
-  --  d=4
+   d=4
    pressed=true
   end
-  -- if pressed then
-  --  s=d+flr((t%(nf*ipf))/ipf+1)*8 --8個先が次のコマ
-  -- else
-  --  s=d
-  -- end
+  if pressed then
+   s=d+flr((t%(nf*ipf))/ipf+1)*8 --8個先が次のコマ
+  else
+   s=d
+  end
 
   if collition(x,y) == true then
     x=prex
@@ -107,12 +107,9 @@ function _draw()
 
   if x>46 and y>46 then go2("/haco8stage1/main.lua") end
   spr8(10,48,48)--アイテム
-  -- spr8(s+64,x,y)
-  color(8)
-  fillrect(x-4,y-4,8,8)--キャラ
+  spr8(s+64,x,y)
 
   print(gstat(),68,2,7)--ゲーム状態を表示
-
 
   -- pset(x+1-cl,y+2-cl, 8)
   -- pset(x+5-cl,y+2-cl, 8)

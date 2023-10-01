@@ -26,16 +26,17 @@ righttop=0
 leftbottom=0
 rightbottom=0
 
--- s=1 -- スプライト番号
--- d=1 -- 方向を示す                                                                                  
--- ipf=8 -- アニメーション1フレームについての時間(1ipf = 1/30秒)
--- nf=2 -- アニメーションするフレーム数(足踏みは2フレーム)
--- t=0
+s=1 -- スプライト番号
+d=1 -- 方向を示す                                                                                  
+ipf=8 -- アニメーション1フレームについての時間(1ipf = 1/30秒)
+nf=2 -- アニメーションするフレーム数(足踏みは2フレーム)
+t=0
 
 -- last_sound=-1
 
 function _init()
   -- ここに書いてもグローバル変数になるようにしたい
+  
   
   --  music(0);--引数変えてもまだ音楽は変わりません（コメントアウトすると音楽なしに）
 end
@@ -52,32 +53,32 @@ function input()
   if (btn(1)>=2) then
   -- sound=0
    x = x-1
-  --  d=1
+   d=1
    pressed=true
   end
   if (btn(2)>=2) then
   -- sound=1
     x = x+1
-  --  d=2
+   d=2
    pressed=true
   end
   if (btn(3)>=2) then
   -- sound=2
    y = y-1
-  --  d=3
+   d=3
    pressed=true
   end
   if (btn(4)>=2) then
   -- sound=3
    y = y+1
-  --  d=4
+   d=4
    pressed=true
   end
 
   if pressed then
-  --  s=d+flr((t%(nf*ipf))/ipf+1)*8 --8個先が次のコマ
+   s=d+flr((t%(nf*ipf))/ipf+1)*8 --8個先が次のコマ
   else
-  --  s=d
+   s=d
   end
 
   if collision(x,y) == true then
@@ -145,9 +146,9 @@ function _draw()
 
   if x>46 and y>46 then go2("/haco8stage2/main.lua", 100) end--状態3で立ち上げる
   spr8(9,48,48)--アイテム
-  -- spr8(s+64,x,y)
-  color(3)
-  fillrect(x-4,y-4,8,8)
+  spr8(s+64,x,y)
+  -- color(3)
+  -- fillrect(x-4,y-4,8,8)
 
   print(gstat(),68,2,7)--ゲーム状態を表示
 

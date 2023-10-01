@@ -1,1 +1,1 @@
-/00sample/main.lua,0,
+/chat/main.lua,2,

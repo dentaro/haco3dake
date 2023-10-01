@@ -3,6 +3,8 @@ cursor = 1
 playCursor = 1
 count = 0
 
+svol = 180;
+
 function clearScore()
     for i = 1,8 do
         score[i] = 0
@@ -18,7 +20,6 @@ function _init()--1回だけ
 end
 
 function input()
-
 
 --   if btn(1) >= 1 then
 --     tone(0, 440, 128)
@@ -57,9 +58,11 @@ end
 function _update()--ループします
   input()
   
+  
 end
 
 function _draw()--ループします
+    
     color(0,0,0)
     fillrect(0,0,128,128)
     
@@ -92,16 +95,23 @@ function _draw()--ループします
           tone(0, score[playCursor]*10 + 440, 0)
         end
     end
+
+    if key() == 'q' then
+        svol = svol + 1;
+        vol(svol)
+    end
+
+    if key() == 'a' then
+        svol = svol - 1;
+        vol(svol)
+    end
     
 
+    print(key())
+    print(svol)
+    
 
 end
-
-
-
-
-
-
 
 
 -- function loop()
