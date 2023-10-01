@@ -20,7 +20,10 @@ ESP-WROOM-32 (D1 Mini)で動くようにplatformIOでメモリ使用量をチュ
 回路図はwroverですが、ボードの種類とピンアサインさえ合わせれば大体お手元にあるesp32,M5Stackなどで動くと思います。
 
 R5,R6は4.7kオーム
+
 R7,R8は120オームです
+
+3.3Vは3につながっています。
 
 <img width="666" alt="haco3dake_circuit" src="https://github.com/dentaro/haco3dake/assets/77978725/7ce8ede0-fe56-4fcb-b7c6-ffab06beb675">
 
