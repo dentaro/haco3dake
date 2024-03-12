@@ -212,6 +212,10 @@ class PS2Keyboard {
      */
     static bool available();
 
+    static bool released();
+    
+    static bool pressed();
+
     /* Discards any received data, sets available() to false without a call to read()
     */
     static void clear();
