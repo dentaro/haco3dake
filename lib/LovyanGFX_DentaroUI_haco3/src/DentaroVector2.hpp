@@ -1,5 +1,4 @@
 #pragma once //インクルードガード
-#include <cmath>
 
 template <typename T>
 class VectorBase {
