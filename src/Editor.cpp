@@ -66,9 +66,7 @@ void Editor::editorScroll() {
   } else if (E. screencol >= E.screenrows) {
     E.rowoff += E. screencol - E.screenrows + 1; // カーソルが画面外に出た場合、rowoffを調整してスクロール
   }
-
 }
-
 
 int countThreeByteCharacters(const char *str) {
     int count = 0;
@@ -82,8 +80,6 @@ int countThreeByteCharacters(const char *str) {
     }
     return count;
 }
-
-
 
 void Editor::editorDrawRows(struct abuf *ab) {
   int y;
@@ -477,9 +473,11 @@ void Editor::editorPageMove(char c) {
 // void Editor::editorProcessKeypress(int c, fs::FS &fs, fs::FS &SD) {
 void Editor::editorProcessKeypress(int c, fs::FS &fs) {
   if(isEditMode){
-  
+    // Serial.println(c);
+    
   // c = keychar;
   if (!c) return;
+
   switch (c) {
     case PS2_ENTER:
       editorInsertNewline();
@@ -493,16 +491,7 @@ void Editor::editorProcessKeypress(int c, fs::FS &fs) {
     //     E.cx = E.row[E.cy].size;
     //   break;
     
-    // case PS2_DELETE:
-    //   if((E.row[E.cy].chars[E.cx - 1] & 0xC0) == 0x80){
-    //     editorDelChar();
-    //     editorDelChar();
-    //     editorDelChar();
-    //   }else{
-    //     editorDelChar();
-    //   }
-    //   break;
-    case PS2_BACKSPACE:
+    case PS2_DELETE:
       if((E.row[E.cy].chars[E.cx - 1] & 0xC0) == 0x80){
         editorDelChar();
         editorDelChar();
@@ -511,6 +500,15 @@ void Editor::editorProcessKeypress(int c, fs::FS &fs) {
         editorDelChar();
       }
       break;
+    // case PS2_BACKSPACE:
+    //   if((E.row[E.cy].chars[E.cx - 1] & 0xC0) == 0x80){
+    //     editorDelChar();
+    //     editorDelChar();
+    //     editorDelChar();
+    //   }else{
+    //     editorDelChar();
+    //   }
+    //   break;
     case PS2_ESC:
       editorSave(fs);
       delay(200);//ちょっと待つ
@@ -546,7 +544,7 @@ void Editor::editorProcessKeypress(int c, fs::FS &fs) {
       editorSetStatusMessage("");
       break;
   }
-}
+  }
 }
 
 void Editor::editorSetStatusMessage(const char *fmt, ...) {
@@ -560,8 +558,9 @@ void Editor::editorSetStatusMessage(const char *fmt, ...) {
 
 void Editor::editorDrawStatusBar(LovyanGFX& tft, struct abuf *ab) {
 
-  tft.setTextSize(1);
-  tft.setFont(&lgfxJapanGothicP_8);
+  // tft.setTextSize(1);
+  // tft.setFont(&lgfxJapanGothicP_8);
+  // tft.setFont(&fonts::Font0);//6*8
   tft.setCursor(0, 115);
   tft.setTextColor(HACO3_C6);
   tft.print(String(E.filename));
@@ -664,13 +663,15 @@ void Editor::editorDrawMessageBar(LovyanGFX& tft, struct abuf *ab) {
 void Editor::editorRefreshScreen(LovyanGFX& tft) {
     struct abuf ab = ABUF_INIT;
     
-    tft.fillScreen(HACO3_C1);
-    tft.setTextSize(1);
-    tft.setFont(&lgfxJapanGothic_12);
+    tft.fillScreen(HACO3_C0);
+    for(int j = 0;j<7;j++){
+      tft.fillRect( 0, j*16, 160, 8, HACO3_C1);
+      }
+    // tft.setTextSize(1);
+    // tft.setFont(&lgfxJapanGothic_8);
     tft.setCursor(0, 1);
     tft.setTextWrap(true);
-    tft.setTextColor(TFT_WHITE);
-    tft.fillScreen(HACO3_C1);
+    tft.setTextColor(HACO3_C7);
     editorScroll();
     editorDrawRows(&ab);
 
@@ -681,7 +682,8 @@ void Editor::editorRefreshScreen(LovyanGFX& tft) {
     }
 
     // カーソルを表示
-    tft.fillRect(getScreenCol() * 6, getScreenRow() * 13, 6, 13, HACO3_C8);
+    // tft.fillRect(getScreenCol() * 6, getScreenRow() * 13, 6, 13, HACO3_C8);//12px
+    tft.fillRect(getScreenCol() * 6, getScreenRow() * 8, 6, 8, HACO3_C8);//6-8px
 
     // スクリーンのリフレッシュ
     tft.setCursor(0, 0);
@@ -845,10 +847,11 @@ void Editor::initEditor(LovyanGFX& tft) {
 
   // screen.fillScreen(TFT_DARKGREEN);
   tft.fillScreen(HACO3_C1);
-  tft.setTextSize(1);//サイズ
-  tft.setFont(&lgfxJapanGothic_12);//日本語可,等幅
+  // tft.setTextSize(1);//サイズ
+  // tft.setFont(&lgfxJapanGothic_12);//日本語可,等幅
+  // tft.setFont(&lgfxJapanGothic_8);//日本語可,等幅
   // tft.setTextSize(1, 1);
-  // tft.setFont(&fonts::Font0);//6*8
+  tft.setFont(&fonts::Font0);//6*8
   tft.setCursor(0,1);//位置
   tft.setTextWrap(true);
   // screen.setTextColor(0x00FFFFU, 0x000033U);
@@ -935,8 +938,6 @@ void Editor::editorSave(fs::FS &fs) {
   fp.close();
 }
 
-
-
 void Editor::writeFile(fs::FS &fs, const char * path, const char * message){
     Serial.printf("Writing file: %s\n", path);
 
@@ -1002,10 +1003,10 @@ void Editor::writeFile(fs::FS &fs, const char * path, const char * message){
 
 // }
 
-void Editor::update(LovyanGFX& tft, fs::FS &fs, char _keychar) { 
+void Editor::update(LovyanGFX& tft, fs::FS &fs, int _keychar) { 
 
     editorProcessKeypress(_keychar, fs);
-    editorRefreshScreen(tft);
+    // editorRefreshScreen(tft);
 
 }
 

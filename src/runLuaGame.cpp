@@ -1,7 +1,28 @@
 #include "runLuaGame.h"
+
+#include <chrono> // std::chrono
+#include <thread> // std::this_thread
+
+extern uint8_t mapArray[16][20];
+extern int gSpr8numX;
+extern int gSpr8numY;
+extern int gWx;
+extern int gWy;
+extern  int gSprw;
+extern  int gSprh;
+extern bool drawMap();
+extern bool readRowFromBinary2(const char *filename);
+
 extern MyTFT_eSprite tft;
 // extern LGFX_Sprite sprite64;
-extern LGFX_Sprite sprite256[2][2];
+// extern LGFX_Sprite sprite256[2][2];
+
+extern uint8_t sprno;
+extern uint8_t repeatnum;
+
+// extern std::vector<uint8_t> rowData;
+std::vector<std::vector<uint8_t>> rowData(16);
+
 extern LGFX_Sprite sprite88_roi;
 extern String appfileName;
 extern void startWifiDebug(bool isSelf);
@@ -9,7 +30,7 @@ extern void setFileName(String s);
 extern bool isWifiDebug();
 extern void readMap();
 extern void reboot();
-extern void reboot(String _fileName, int _isEditMode);
+extern void reboot(String _fileName, uint8_t _isEditMode);
 // extern Tunes tunes;
 extern int pressedBtnID;
 extern LovyanGFX_DentaroUI ui;
@@ -29,7 +50,7 @@ extern bool toneflag;
 extern bool firstLoopF;
 extern float radone;
 extern bool downloadF;
-extern void setOpenConfig(String fileName, int _isEditMode);
+extern void setOpenConfig(String fileName, uint8_t _isEditMode);
 extern void getOpenConfig(String _wrfile);
 extern std::deque<int> buttonState;//ボタンの個数未定
 
@@ -44,12 +65,23 @@ extern uint8_t mainVol;
 extern String savedAppfileName;
 extern bool difffileF;//前と違うファイルを開こうとしたときに立つフラグ
 
-extern Speaker_Class speaker;
+// extern Speaker_Class speaker;
 
 extern std::vector<uint8_t> sprite64cnos_vector;
+extern int gameState;
 // extern void getOpenConfig(String _wrfile);
+extern uint16_t gethaco3Col(uint8_t haco3ColNo);
 
 int cursor = 0;
+
+uint16_t hacol0;
+uint16_t hacol1;
+uint16_t hacol2;
+uint16_t hacol3;
+
+std::vector<uint8_t> buffer;
+int bytesRead;
+
 
 // runLuaGame.cpp ファイル内に以下のように RGBValues 配列を宣言してください。
 // const uint8_t RGBValues[][3] PROGMEM = {//24bit
@@ -128,7 +160,7 @@ extern "C" {
   }
 }
 
-int RunLuaGame::loadSurface(File *fp, uint8_t* buf){
+int runLuaGame::loadSurface(File *fp, uint8_t* buf){
   uint8_t c;
   unsigned long offset;
   unsigned long width, height;
@@ -181,7 +213,7 @@ int RunLuaGame::loadSurface(File *fp, uint8_t* buf){
     fp->read(&g, 1);
     fp->read(&r, 1);
     fp->seek(1, SeekCur);
-    palette[i] = lua_rgb24to16(r, g, b);
+    // palette[i] = lua_rgb24to16(r, g, b);
     // Serial.print("palette");
     // Serial.println(i);
     // Serial.print(r);
@@ -201,48 +233,21 @@ int RunLuaGame::loadSurface(File *fp, uint8_t* buf){
   return 0;
 }
 
-// int RunLuaGame::l_tp(lua_State* L)
-// {
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
-//   int n = lua_tointeger(L, 1);
-//   if(ui.getPos().x<256){//UIエリアに入っていなければ
-//     self->tp[0] = ui.getPos().x/2;
-//     self->tp[1] = ui.getPos().y/2;
-//     lua_pushinteger(L, (lua_Integer)self->tp[n]);
-//   }else{//UIエリアに入ったら
-//     // タッチされても過去の値をそのまま返す
-//     lua_pushinteger(L, (lua_Integer)self->tp[n]);
-//   }
-//   return 1;
-// }
+runLuaGame::runLuaGame(int _gameState, String _mn){
+  gameState = _gameState;
+  mapFileName = _mn;
+}
 
-// int RunLuaGame::l_tstat(lua_State* L)
-// {
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
-//   int en = ui.getEvent();
-//   lua_pushinteger(L, en);
-//   return 1;
-// }
-
-// int RunLuaGame::l_tp(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
-//   int n = lua_tointeger(L, 1);
-//   self->tp[0] = ui.getPos().x/2;
-//   self->tp[1] = ui.getPos().y/2;
-//   lua_pushinteger(L, (lua_Integer)self->tp[n]);//JSに値をリターンできる
-//   return 1;//１にしないといけない（duk_pushでJSに値をリターンできる
-// }
-
-int RunLuaGame::l_vol(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_vol(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int v = lua_tointeger(L, 1);//チャンネル?
   mainVol = v;
   return 0;
 }
 
 
-int RunLuaGame::l_tone(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_tone(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int n = lua_tointeger(L, 1);//チャンネル?
   int f = lua_tointeger(L, 2);//周波数
   int sl = lua_tointeger(L, 3);//音の長さ
@@ -279,29 +284,29 @@ int RunLuaGame::l_tone(lua_State* L){
 // };
 
 //矩形波
-  const uint8_t wavdata[64] PROGMEM = {
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
-  };
+//   const uint8_t wavdata[64] PROGMEM = {
+//     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+//     255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 
+//     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   
+//     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
+//   };
 
-speaker.setVolume(mainVol);//151が出力限界か？
+// speaker.setVolume(mainVol);//151が出力限界か？
 
-if(sl!=0){
-  if(sl!=0){
-  // speaker.tone(f, sl, 0, true, wavdata, sizeof(wavdata));
-  // speaker.tone(f, sl, 0);//チャンネル０
-  // speaker.tone(f/2, sl, 1);//チャンネル1
-  // speaker.tone(f*2, sl, 2);//チャンネル2
-  speaker.tone(f, sl, 0, true, wavdata, sizeof(wavdata));//チャンネル0
-  // speaker.tone(f*2, sl, 1, true, wavdata, sizeof(wavdata));//チャンネル1
+// if(sl!=0){
+//   if(sl!=0){
+//   // speaker.tone(f, sl, 0, true, wavdata, sizeof(wavdata));
+//   // speaker.tone(f, sl, 0);//チャンネル０
+//   // speaker.tone(f/2, sl, 1);//チャンネル1
+//   // speaker.tone(f*2, sl, 2);//チャンネル2
+//   speaker.tone(f, sl, 0, true, wavdata, sizeof(wavdata));//チャンネル0
+//   // speaker.tone(f*2, sl, 1, true, wavdata, sizeof(wavdata));//チャンネル1
 
-  while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
-  speaker.stop();
+//   while (speaker.isPlaying()) { delay(1); } // Wait for the output to finish.
+//   speaker.stop();
 
-  }
-}
+//   }
+// }
 
 
   // toneflag = true;
@@ -324,24 +329,173 @@ if(sl!=0){
   return 0;
 }
 
-int RunLuaGame::l_pinw(lua_State* L){  
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_pinw(lua_State* L){  
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int no = lua_tointeger(L, 1);
   if(no == 0)digitalWrite(OUTPIN_0, LOW);
   if(no == 1)digitalWrite(OUTPIN_0, HIGH);
   return 0;
 }
 
-int RunLuaGame::l_pinr(lua_State* L){  
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_pinr(lua_State* L){  
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int no = lua_tointeger(L, 1);
   if(no == 0)digitalWrite(INPIN_0, LOW);
   if(no == 1)digitalWrite(INPIN_0, HIGH);
   return 0;
 }
 
-int RunLuaGame::l_spr(lua_State* L){  
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+int runLuaGame::l_spr8(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+  int n = lua_tointeger(L, 1);
+  int x = lua_tointeger(L, 2);
+  int y = lua_tointeger(L, 3);
+  int scalex = lua_tointeger(L, 4);
+  int scaley = lua_tointeger(L, 5);
+  int angle = lua_tointeger(L, 6);
+  int tc = 0;//デフォルトの透明色は黒
+  tc = lua_tointeger(L, 7);//透明色
+
+  if( x>=0 && y>=0 && x<DISP_SPR_W_NUM*8 && y<DISP_SPR_H_NUM*8 ){//ディスプレイに入っているときのみ描画する
+
+  uint8_t edgeno = lua_tointeger(L, 8);//縁取りの色
+
+  x >> 3;  // xを8で割る（右シフト演算子を使用）
+  y >> 3;  // yを8で割る
+
+  if(y<DISP_SPR_H_NUM && x<DISP_SPR_W_NUM){
+    mapArray[y][x] = uint8_t(n);//スプライト位置のマップ情報を書き換える
+  }
+
+  int w = 8;
+  int h = 8;
+
+  if(edgeno!=NULL){//エッジあり
+     w = 10;
+     h = 10;
+  }
+
+  sprite88_roi.clear();//指定の大きさにスプライトを作り直す
+  sprite88_roi.createSprite(w,h);
+
+  int spr8numX = 8;//スプライトシートに並ぶｘ、ｙの個数
+  int spr8numY = 8;
+
+  int sx = ((n-1)%spr8numX); //0~7
+  int sy = ((n-1)/spr8numY); //整数の割り算はintにいれると切り捨てされる
+
+  // for(int y=0;y<8;y++){
+  //   for(int x=0;x<8;x++){
+  //     uint8_t bit4;
+  //     int sprpos;
+  //     sprpos = (sy*8*PNG_SPRITE_WIDTH+sx*8 + y*PNG_SPRITE_WIDTH + x)/2;//４ビット二つで８ビットに入れてるので1/2に
+  //     bit4 = sprite64cnos_vector[sprpos];
+  //     if(x%2 == 1)bit4 = (bit4 & 0b00001111);
+  //     if(x%2 == 0)bit4 = (bit4 >> 4);
+  //     sprite88_roi.drawPixel(x,y, gethaco3Col(bit4));
+  //   }
+  // }
+
+//エッジあり
+  if(edgeno!=NULL){
+//キャラスプライト
+  for(int y=0;y<8;y++){
+      for(int x=0;x<8;x++){
+        uint8_t bit4;
+        int sprpos;
+
+        sprpos = (sy*8*PNG_SPRITE_WIDTH+sx*8 + y*PNG_SPRITE_WIDTH + x)/2;//４ビット二つで８ビットに入れてるので1/2に
+        bit4 = sprite64cnos_vector[sprpos];
+        if(x%2 == 1)bit4 = (bit4 & 0b00001111);
+        if(x%2 == 0)bit4 = (bit4 >> 4);
+        sprite88_roi.drawPixel(x+1,y+1, gethaco3Col(bit4));
+
+      }
+  }
+  sprite88_roi.drawRect(0,0,10,10,gethaco3Col(0));
+
+  bool upCol[10];
+  bool preupCol[10];
+  bool preCol = 1;
+  bool nowCol = 1;
+  bool nutta = false;
+
+  uint8_t colValR;
+  uint8_t colValG;
+  uint8_t colValB;
+
+  for(int y=0;y<10;y++){
+    for(int x=0;x<10;x++){
+
+      colValR = sprite88_roi.readPixelRGB(x,y).R8();
+      colValG = sprite88_roi.readPixelRGB(x,y).G8();
+      colValB = sprite88_roi.readPixelRGB(x,y).B8();
+
+      if(colValR==0&&colValG==0&&colValB==0){//0: 黒色=なし
+        upCol[x] = 0;
+        nowCol = 0;
+      }else{
+        upCol[x] = 1;
+        nowCol = 1;
+        nutta=false;
+      }
+
+      if(preupCol[x] == 0&&nowCol == 1){//上が黒だったら
+        sprite88_roi.drawPixel(x,y-1, gethaco3Col(edgeno));
+      }
+
+      if(preupCol[x] == 1&&nowCol == 0&&y!=0){//上が黒以外だったら
+        sprite88_roi.drawPixel(x,y, gethaco3Col(edgeno));
+        // nutta = true;
+      }
+
+      if(preCol==0&&nowCol == 1){//黒から黒以外になったら
+        sprite88_roi.drawPixel(x-1,y, gethaco3Col(edgeno));
+      }
+
+      if(preCol==1&&nowCol == 0&& nutta == false){//黒以外から黒になったら
+        sprite88_roi.drawPixel(x,y, gethaco3Col(edgeno));
+        nutta = true;
+      }
+      preCol = nowCol;
+    }
+    memcpy(preupCol, upCol, sizeof(upCol));
+  }
+  }else{
+    for(int y=0;y<8;y++){
+      for(int x=0;x<8;x++){
+        uint8_t bit4;
+        int sprpos;
+        //sprite64cnos[(sy*8) * PNG_SPRITE_WIDTH + (sx*8) 取得スタート位置
+        //y*PNG_SPRITE_WIDTH + xスプライトのピクセル取得
+        sprpos = (sy*8*PNG_SPRITE_WIDTH+sx*8 + y*PNG_SPRITE_WIDTH + x)/2;//４ビット二つで８ビットに入れてるので1/2に
+        bit4 = sprite64cnos_vector[sprpos];
+        if(x%2 == 1)bit4 = (bit4 & 0b00001111);
+        if(x%2 == 0)bit4 = (bit4 >> 4);
+        sprite88_roi.drawPixel(x,y, gethaco3Col(bit4));
+      }
+    }
+  }
+
+  // sprite88_roi.setPivot(w/2.0, h/2.0);
+  sprite88_roi.setPivot(0, 0);
+  if(scalex == NULL && scaley==NULL && angle == NULL){
+    sprite88_roi.pushRotateZoom(&tft, x, y, 0, 1, 1, gethaco3Col(tc));
+  }else  if(scalex != NULL && scaley!=NULL && angle == NULL){
+    sprite88_roi.pushRotateZoom(&tft, x, y, 0, scalex, scaley, gethaco3Col(tc));
+  }else  if(scalex != NULL && scaley!=NULL && angle != NULL){
+    sprite88_roi.pushRotateZoom(&tft, x, y, angle, scalex, scaley, gethaco3Col(tc));
+  }
+
+  }
+  return 0;
+}
+
+
+int runLuaGame::l_spr(lua_State* L){  
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 
   int x = lua_tointeger(L, 1);
   int y = lua_tointeger(L, 2);
@@ -404,8 +558,8 @@ int RunLuaGame::l_spr(lua_State* L){
 
 
 
-int RunLuaGame::l_scroll(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_scroll(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int x = lua_tointeger(L, 1);
   int y = lua_tointeger(L, 2);
 
@@ -413,8 +567,293 @@ int RunLuaGame::l_scroll(lua_State* L){
   return 0;
 }
 
-int RunLuaGame::l_pset(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+int runLuaGame::l_win(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int state = lua_tointeger(L, 1);
+  int x = lua_tointeger(L, 2);
+  int y = lua_tointeger(L, 3);
+  int row = lua_tointeger(L, 4);
+  int col = lua_tointeger(L, 5);
+  int charmax = lua_tointeger(L, 6);
+  int winID = lua_tointeger(L, 7);
+  const char* title = lua_tostring(L, 8);
+  
+  if(state == 1){//可視化状態
+    tft.setFont(&lgfxJapanGothicP_8);
+    tft.fillRoundRect(x,y,(charmax*row+row+1)*8,(col+2)*8,4,gethaco3Col(1));
+    
+    for(int j = 0; j<col; j++){
+      for(int i = 0; i<row; i++){
+        tft.setTextColor(gethaco3Col(7));
+
+        if(winID==0){
+          tft.setCursor(x+8+(i*(charmax+1)*8), y+8+(j*8));
+          tft.print("");
+          if(strcmp(title, "どうする？") == 0){
+            tft.print("ステテコ");
+            }
+          else if(strcmp(title, "どうぐ") == 0){
+            tft.print("みかわしのふく");
+            }
+          else if(strcmp(title, "むらびと") == 0){
+            // tft.setFont(&lgfxJapanGothicP_16);
+            // tft.print("曖昧模糊な薔薇の轟");
+            // j++;//2倍角なのでjに1足して繰り返し回数を半分にする
+            tft.setFont(&lgfxJapanGothicP_8);
+            tft.print("画数が少ない文字であれば、8pxでも良");
+            // tft.print("曖昧模糊な薔薇の轟曖昧模糊な薔薇の轟");
+          }
+        }else if(winID==HPMP){
+          tft.setFont(&fonts::Font0);
+          tft.setCursor(x+4+(i*(charmax+1)*8), y+12+(j*8));
+          if(j==0){tft.print("HP");}
+          else if(j==1){tft.print("MP");}
+          tft.print("999");
+        }
+
+        // for(int n = 0; n<charmax; n++){
+        //   // tft.drawRect(x+8+(n*8)+(i*(charmax+1)*8), y+8+(j*8), 8,8, gethaco3Col(7));
+          // tft.setTextColor(gethaco3Col(7));
+          // tft.setCursor(x+8+(n*8)+(i*(charmax+1)*8), y+8+(j*8));
+          // tft.print("あ");
+        // }
+      }
+    }
+    //ウインドウタイトルを描画
+    tft.drawRoundRect(x+1,y+1,(charmax*row+row+1)*8-2,(col+2)*8-2, 4,gethaco3Col(7));//白い枠線
+    tft.setTextColor(gethaco3Col(7),gethaco3Col(1));//文字背景あり
+    tft.setTextSize(1);
+    tft.setFont(&lgfxJapanGothicP_8);
+    tft.setCursor(x+4, y);
+    tft.println(title);
+
+    // if(strcmp(title, "むらびと") == 0){
+    //   tft.setCursor(x+8, y+8);
+    //   tft.setClipRect(x+8, y+8, 144, 40);//文字以外のすべての描画にかかわるので最後に指定
+    //   tft.setFont(&lgfxJapanGothicP_16);
+    //   tft.print("曖昧模糊な薔薇の轟19文字も書ける");
+    // }
+  }
+
+  // gethaco3Col(1);//紺
+  // gethaco3Col(7);//白
+
+  // if(tsize == NULL){
+  //   tft.setTextSize(1);
+  //   tft.setFont(&fonts::Font0);
+  // }else if(tsize==8){
+  //   tft.setTextSize(1);
+  //   tft.setCursor(x,y);
+  //   // tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]));//文字背景を消せる
+  //   tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]),lua_rgb24to16(self->col2[0], self->col2[1], self->col2[2]));//文字背景を消せる
+  //   tft.setFont(&lgfxJapanGothicP_8);
+  // }else if(tsize==16){
+  //   tft.setTextSize(1);
+  //   tft.setCursor(x,y);
+  //   // tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]));//文字背景を消せる
+  //   tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]),lua_rgb24to16(self->col2[0], self->col2[1], self->col2[2]));//文字背景を消せる
+  //   tft.setFont(&lgfxJapanGothicP_16);
+  // }
+
+  // if(x == NULL && y == NULL && tsize == NULL && cn == NULL){//位置指定なしの場合
+  //   tft.setTextColor(TFT_WHITE,TFT_BLACK);//文字背景あり
+  //   tft.setCursor(0,0);
+  //   tft.setClipRect(0, 0, TFT_WIDTH, TFT_HEIGHT);
+  // }else if(x != NULL && y != NULL && tsize == NULL && cn == NULL){//位置指定ありの場合
+  //   tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]));//文字背景を消せる
+  //   tft.setTextColor(TFT_WHITE,TFT_BLACK);//文字背景あり
+  //   tft.setCursor(x,y);
+  //   tft.setClipRect(x, y, TFT_WIDTH-x, TFT_HEIGHT-y);
+  // }else if(x != NULL && y != NULL && tsize != NULL && cn == NULL){//位置指定、、色指定ありの場合
+  //   tft.setTextColor(TFT_WHITE,TFT_BLACK);//文字背景あり
+  //   tft.setCursor(x,y);
+  //   tft.setClipRect(x, y, TFT_WIDTH-x, TFT_HEIGHT-y);
+  // }else if(x != NULL && y != NULL && tsize != NULL && cn != NULL){//位置指定、、色指定ありの場合
+  //   tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]));//文字背景を消せる
+  //   tft.setCursor(x,y);
+  //   tft.setClipRect(x, y, TFT_WIDTH-x, TFT_HEIGHT-y);
+  // }else if(x != NULL && y != NULL && tsize != NULL && cn != NULL && cn2 != NULL){//位置指定、、色指定,背景色指定ありの場合
+  //   tft.setTextColor(lua_rgb24to16(self->col[0], self->col[1], self->col[2]),lua_rgb24to16(self->col2[0], self->col2[1], self->col2[2]));//文字背景を消せる
+  //   tft.setCursor(x,y);
+  //   tft.setClipRect(x, y, TFT_WIDTH-x, TFT_HEIGHT-y);
+  // }
+  // tft.println(text);
+  // tft.clearClipRect();
+  // //描画後は設定をデフォルトに戻しておく
+  // tft.setTextColor(TFT_WHITE,TFT_BLACK);//文字背景あり
+  return 0;
+}
+
+
+bool drawMap() {
+  int ColCursor = 0;
+  uint8_t sprno;
+  uint8_t presprno = 0; // 初期値を設定
+  uint8_t repeatnum;
+
+  for (uint8_t k = 0; k < 16; k++) {
+    int j = k;
+    // int j = (k+16+targetDispRow)%16;
+    for (uint8_t i = 0; i < rowData[k].size(); i += 2) {
+      sprno = rowData[k][i];
+      repeatnum = rowData[k][i + 1];
+
+      if (sprno == 3 && repeatnum == 31) {
+        repeatnum = 0;
+        ColCursor = 0;
+      } else {
+        if (sprno == 7) {
+          if (gWy >= 220 || (gWx >= 49 && gWy <= 97)) {
+            sprno = 15;
+          }
+        }
+
+        int sx = sprno % gSpr8numX;
+        int sy = sprno / gSpr8numY;
+
+        for (int y = 0; y < 8; y++) {
+          for (int x = 0; x < 8; x++) {
+            uint8_t bit4;
+            int sprpos;
+            sprpos = (sy * 8 * PNG_SPRITE_WIDTH + sx * 8 + y * PNG_SPRITE_WIDTH + x) / 2;
+            bit4 = sprite64cnos_vector[sprpos];
+            if (x % 2 == 1) bit4 = (bit4 & 0b00001111);
+            if (x % 2 == 0) bit4 = (bit4 >> 4);
+            sprite88_roi.drawPixel(x, y, gethaco3Col(bit4));
+          }
+        }
+
+        for (int n = 0; n < repeatnum; n++) {
+          int sprx = ColCursor + n;
+          int displaysprx = sprx - gWx;
+
+          if (sprx >= gWx && sprx < gWx + DISP_SPR_W_NUM) {
+            mapArray[j][displaysprx] = sprno;
+
+            // 例: 描画対象が同じ場合は描画をスキップ
+            // if (presprno != sprno) {
+            //   sprite88_roi.setPivot(4.0, 4.0);
+            //   sprite88_roi.pushSprite(&tft, (ColCursor + n - gWx) * 8, j * 8);
+            // }
+
+            // sprite88_roi.setPivot(gSprw / 2.0, gSprh / 2.0);
+            // sprite88_roi.pushSprite(&tft, (ColCursor + n - gWx) * 8, j * 8);
+
+            sprite88_roi.setPivot(4.0, 4.0);
+            sprite88_roi.pushSprite(&tft, (ColCursor + n - gWx) * 8, j * 8);
+            // sprite88_roi.pushSprite(&tft, (ColCursor + n - gWx) << 3, j << 3);
+            
+            // 海岸線の場合は描写を足す
+            if (displaysprx != 0) {
+              if (presprno == 0 && sprno != 0) { // 海から陸ならば
+                tft.fillRect((ColCursor + n - gWx - 1) * 8 + 7, j * 8, 1, 8, gethaco3Col(7));
+              }
+              if (presprno != 0 && sprno == 0) { // 陸から海ならば
+                tft.fillRect((ColCursor + n - gWx) * 8, j * 8, 1, 8, gethaco3Col(7));
+              }
+            }
+
+            if (j != 0) {
+              if (sprno != 0 && mapArray[j - 1][displaysprx] == 0) { // 陸の時上が海か
+                tft.fillRect((ColCursor + n - gWx) * 8, (j - 1) * 8 + 7, 8, 1, gethaco3Col(7));
+              }
+
+              if (sprno == 0 && mapArray[j - 1][displaysprx] != 0) { // 海の時上が陸か
+                tft.fillRect((ColCursor + n - gWx) * 8, j * 8, 8, 1, gethaco3Col(7));
+              }
+            }
+
+            presprno = sprno;
+          }
+        }
+
+        ColCursor += repeatnum;
+      }
+    }
+  }
+
+  return true;
+}
+
+bool readRowFromBinary2(const char *filename) {
+  int _startRow = gWy;
+  int nnum = 0;
+
+  File mfile = SPIFFS.open(filename, "rb");
+
+  if (!mfile) {
+    // Serial.println("Error opening file");
+    return false;
+  }
+
+  std::vector<std::vector<uint8_t>> new_rowData(16, std::vector<uint8_t>());
+
+  // buffer のクリアとリサイズ
+  buffer.clear();
+  buffer.resize(8);
+
+  while (nnum < _startRow + DISP_SPR_H_NUM) {
+    bytesRead = mfile.read(buffer.data(), buffer.size());
+
+    if (bytesRead == 0) {
+      break;
+    }
+
+    for (int i = 0; i < bytesRead; i++) {
+      sprno = buffer[i] >> 5;
+      repeatnum = buffer[i] & 0b00011111;
+
+      if (nnum >= _startRow && nnum < _startRow + DISP_SPR_H_NUM) {
+        if (sprno == 0 && repeatnum == 0) {
+          repeatnum = 255;
+        }
+
+        new_rowData[nnum - _startRow].push_back(sprno);
+        new_rowData[nnum - _startRow].push_back(repeatnum);
+      }
+
+      if (sprno == 3 && repeatnum == 31) {
+        ++nnum;
+      }
+    }
+  }
+
+  mfile.close();
+
+  // rowData を new_rowData に入れ替える
+  rowData.swap(new_rowData);
+
+  mfile = File();  // 不要な行の削除
+
+  // drawWaitF = false;
+  return true;
+}
+
+int runLuaGame::l_rmap(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  String fn = lua_tostring(L, 1);
+  gWx = lua_tointeger(L, 2);
+  gWy = lua_tointeger(L, 3);
+  mapFileName = fn;
+  sprite88_roi.clear(); // 指定の大きさにスプライトを作り直す
+  sprite88_roi.createSprite(gSprw, gSprh);
+
+  while(!readRowFromBinary2(fn.c_str())){
+    // delay(1);//1/50秒表示
+    std::this_thread::sleep_for(std::chrono::milliseconds(20)); // 20ミリ秒スリープ
+  }
+  
+  while(!drawMap()){
+    // delay(1);//1/50秒表示
+    std::this_thread::sleep_for(std::chrono::milliseconds(20)); // 20ミリ秒スリープ
+  }
+
+  return 0;
+}
+
+int runLuaGame::l_pset(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   float x = lua_tonumber(L, 1);
   float y = lua_tonumber(L, 2);
   int cn = lua_tointeger(L, 3);
@@ -435,20 +874,20 @@ int RunLuaGame::l_pset(lua_State* L){
   return 0;
 }
 
-int RunLuaGame::l_pget(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_pget(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int x = lua_tointeger(L, 1);
   int y = lua_tointeger(L, 2);
 
   uint16_t c = tft.readPixel(x, y);
 
   uint8_t index = 0;
-  for(unsigned int pi = 0; pi < 256; pi ++){
-    if(self->palette[pi] == c){
-      index = pi;
-      break;
-    }
-  }
+  // for(unsigned int pi = 0; pi < 256; pi ++){
+  //   if(self->palette[pi] == c){
+  //     index = pi;
+  //     break;
+  //   }
+  // }
   uint8_t r = ((c >> 11) << 3); // 5bit
   uint8_t g = (((c >> 5) & 0b111111) << 2); // 6bit
   uint8_t b = ((c & 0b11111) << 3);       // 5bit
@@ -460,8 +899,12 @@ int RunLuaGame::l_pget(lua_State* L){
   return 4;
 }
 
-int RunLuaGame::l_color(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+extern uint8_t clist2[16][3];
+// extern uint8_t clist_p0[16][3];
+// extern uint8_t clist_p1[16][3];
+
+int runLuaGame::l_color(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int r,g,b;
   r = lua_tointeger(L, 1);
   g = lua_tointeger(L, 2);
@@ -473,15 +916,36 @@ int RunLuaGame::l_color(lua_State* L){
   //色番号だったら上書き
   if(g == NULL && b == NULL){
     int cn = lua_tointeger(L, 1);
-    self->col[0] = self->clist[cn][0]; // 5bit
-    self->col[1] = self->clist[cn][1]; // 6bit
-    self->col[2] = self->clist[cn][2]; // 5bit
+    self->col[0] = clist2[cn][0]; // 5bit
+    self->col[1] = clist2[cn][1]; // 6bit
+    self->col[2] = clist2[cn][2]; // 5bit
   }
   return 0;
 }
 
-int RunLuaGame::l_text(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+// int runLuaGame::l_color(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+//   int r,g,b;
+//   r = lua_tointeger(L, 1);
+//   g = lua_tointeger(L, 2);
+//   b = lua_tointeger(L, 3);
+//     //とにかく一回格納する
+//   self->col[0] = r;
+//   self->col[1] = g;
+//   self->col[2] = b;
+//   //色番号だったら上書き
+//   if(g == NULL && b == NULL){
+//     int cn = lua_tointeger(L, 1);
+//     self->col[0] = clist2[cn][0]; // 5bit
+//     self->col[1] = clist2[cn][1]; // 6bit
+//     self->col[2] = clist2[cn][2]; // 5bit
+//   }
+//   return 0;
+// }
+
+int runLuaGame::l_text(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   const char* text = lua_tostring(L, 1);
   int x = lua_tointeger(L, 2);
   int y = lua_tointeger(L, 3);
@@ -498,15 +962,15 @@ int RunLuaGame::l_text(lua_State* L){
 
 
 
-int RunLuaGame::l_opmode(lua_State* L){//FAST,WIDE
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_opmode(lua_State* L){//FAST,WIDE
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int _n = lua_tointeger(L, 1);
   outputMode = _n;
   return 0;
 }
 
-int RunLuaGame::l_drawrect(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_drawrect(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   float x = lua_tonumber(L, 1);
   float y = lua_tonumber(L, 2);
   float w = lua_tonumber(L, 3);
@@ -515,17 +979,17 @@ int RunLuaGame::l_drawrect(lua_State* L){
   
   if(cn != NULL)
   {
-    self->col[0] = self->clist[cn][0]; // 5bit
-    self->col[1] = self->clist[cn][1]; // 6bit
-    self->col[2] = self->clist[cn][2]; // 5bit
+    self->col[0] = clist2[cn][0]; // 5bit
+    self->col[1] = clist2[cn][1]; // 6bit
+    self->col[2] = clist2[cn][2]; // 5bit
   }
 
   tft.drawRect(x, y, w, h, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
   return 0;
 }
 
-int RunLuaGame::l_drawbox(lua_State* L) {
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_drawbox(lua_State* L) {
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   
   float px = lua_tonumber(L, 1);
   float py = lua_tonumber(L, 2);
@@ -535,9 +999,9 @@ int RunLuaGame::l_drawbox(lua_State* L) {
   int cn = lua_tointeger(L, 6);
   
   if (cn != 0) { // NULL ではなく 0 と比較することを推奨します
-    self->col[0] = self->clist[cn][0]; // 5bit
-    self->col[1] = self->clist[cn][1]; // 6bit
-    self->col[2] = self->clist[cn][2]; // 5bit
+    self->col[0] = clist2[cn][0]; // 5bit
+    self->col[1] = clist2[cn][1]; // 6bit
+    self->col[2] = clist2[cn][2]; // 5bit
   }
 
   self->boxzerox = px;
@@ -567,8 +1031,8 @@ int RunLuaGame::l_drawbox(lua_State* L) {
   return 0;
 }
 
-int RunLuaGame::l_drawboxp(lua_State* L) {
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_drawboxp(lua_State* L) {
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   
   float x = lua_tonumber(L, 1);
   float y = lua_tonumber(L, 2);
@@ -603,8 +1067,142 @@ lua_pushinteger(L, 3);
 return 2;
 }
 
-int RunLuaGame::l_fillpoly(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+int runLuaGame::l_oval(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int x = lua_tointeger(L, 1);
+  int y = lua_tointeger(L, 2);
+  int rx = lua_tointeger(L, 3);
+  int ry = lua_tointeger(L, 4);
+  int cn = lua_tointeger(L, 5);
+  if(cn != NULL)
+  {
+    hacol0 =  gethaco3Col(cn);
+  }
+  tft.drawEllipse(x, y, rx, ry, hacol0);
+  return 0;
+}
+
+// int runLuaGame::l_fps(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+//   fps = lua_tointeger(L, 1);
+// }
+
+int runLuaGame::l_fillp(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int cn0 = lua_tointeger(L, 1);
+  int cn1 = lua_tointeger(L, 2);
+  int cn2 = lua_tointeger(L, 3);
+  int cn3 = lua_tointeger(L, 4);
+
+  hacol0 =  gethaco3Col(cn0);
+  hacol1 =  gethaco3Col(cn1);
+
+  if(cn2==NULL){
+    hacol2 =  gethaco3Col(cn0);
+    hacol3 =  gethaco3Col(cn1);
+  }
+  
+  if(cn2!=NULL){
+    hacol2 =  gethaco3Col(cn2);
+  }
+  if(cn3!=NULL){
+    hacol3 =  gethaco3Col(cn3);
+  }
+  return 0;
+}
+
+int runLuaGame::l_ovalfill(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int x = lua_tointeger(L, 1);
+  int y = lua_tointeger(L, 2);
+  int rx = lua_tointeger(L, 3);
+  int ry = lua_tointeger(L, 4);
+  int cn0 = lua_tointeger(L, 5);
+  int cn1 = lua_tointeger(L, 6);
+
+  if(cn0 != NULL)
+    {
+      hacol0 = gethaco3Col(cn0);
+      hacol1 = gethaco3Col(cn0);//仮に入れておく
+      hacol2 = gethaco3Col(cn0);//仮に入れておく
+      hacol3 = gethaco3Col(cn0);//仮に入れておく
+    }
+    
+    if(cn1 != NULL)
+    {
+      hacol0 = gethaco3Col(cn0);
+      hacol1 = gethaco3Col(cn1);
+      hacol2 = gethaco3Col(cn0);
+      hacol3 = gethaco3Col(cn1);
+    }
+
+    int32_t xt, yt, i;
+    int32_t rx2 = rx * rx;
+    int32_t ry2 = ry * ry;
+    int32_t s;
+
+    tft.startWrite();
+
+    if(y%4==0)tft.setColor(hacol0);
+    else if(y%4==1)tft.setColor(hacol1);
+    else if(y%4==2)tft.setColor(hacol2);
+    else if(y%4==3)tft.setColor(hacol3);
+    tft.writeFastHLine(x - rx, y, (rx << 1) + 1);//まんなかの１本
+    
+    i = 0;
+    yt = 0;
+    xt = rx;
+    s = (rx2 << 1) + ry2 * (1 - (rx << 1));
+
+    do {
+      while (s < 0) s += rx2 * ((++yt << 2) + 2);
+
+      for (int32_t k = 0; k < (yt - i); k++) {
+
+        if(((y - yt)+k)%4==0)tft.setColor(hacol0);
+        else if(((y - yt)+k)%4==1)tft.setColor(hacol1);
+        else if(((y - yt)+k)%4==2)tft.setColor(hacol2);
+        else if(((y - yt)+k)%4==3)tft.setColor(hacol3);
+        tft.writeFastHLine(x - xt, (y - yt)+k, (xt << 1) + 1);
+
+        if(((y + i + 1)+k)%4==0)tft.setColor(hacol0);
+        else if(((y + i + 1)+k)%4==1)tft.setColor(hacol1);
+        else if(((y + i + 1)+k)%4==2)tft.setColor(hacol2);
+        else if(((y + i + 1)+k)%4==3)tft.setColor(hacol3);
+        tft.writeFastHLine(x - xt, (y + i + 1)+k, (xt << 1) + 1);
+      }
+
+      i = yt;
+      s -= (--xt) * ry2 << 2;
+    } while (rx2 * yt <= ry2 * xt);
+
+    xt = 0;
+    yt = ry;
+    s = (ry2 << 1) + rx2 * (1 - (ry << 1));
+    do {
+      while (s < 0) s += ry2 * ((++xt << 2) + 2);
+        if((y - yt)%4==0)tft.setColor(hacol0);
+        else if((y - yt)%4==1)tft.setColor(hacol1);
+        else if((y - yt)%4==2)tft.setColor(hacol2);
+        else if((y - yt)%4==3)tft.setColor(hacol3);
+        tft.writeFastHLine(x - xt, y - yt, (xt << 1) + 1);
+
+        if((y + yt)%4==0)tft.setColor(hacol0);
+        else if((y + yt)%4==1)tft.setColor(hacol1);
+        else if((y + yt)%4==2)tft.setColor(hacol2);
+        else if((y + yt)%4==3)tft.setColor(hacol3);
+        tft.writeFastHLine(x - xt, y + yt, (xt << 1) + 1);
+        s -= (--yt) * rx2 << 2;
+    } while(ry2 * xt <= rx2 * yt);
+
+    tft.endWrite();
+  return 0;
+}
+
+
+int runLuaGame::l_fillpoly(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   float x0 = lua_tonumber(L, 1);
   float y0 = lua_tonumber(L, 2);
   float x1 = lua_tonumber(L, 3);
@@ -615,9 +1213,9 @@ int RunLuaGame::l_fillpoly(lua_State* L){
   float y3 = lua_tonumber(L, 8);
   int cn = lua_tointeger(L, 9);
 
-  self->col[0] = self->clist[cn][0]; // 5bit
-  self->col[1] = self->clist[cn][1]; // 6bit
-  self->col[2] = self->clist[cn][2]; // 5bit
+  self->col[0] = clist2[cn][0]; // 5bit
+  self->col[1] = clist2[cn][1]; // 6bit
+  self->col[2] = clist2[cn][2]; // 5bit
 
   self->fillFastTriangle(x0,y0,x1,y1,x2,y2,lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
   self->fillFastTriangle(x2,y2,x3,y3,x0,y0,lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
@@ -628,53 +1226,136 @@ int RunLuaGame::l_fillpoly(lua_State* L){
 
 }
 
-int RunLuaGame::l_fillrect(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
-  float x = lua_tonumber(L, 1);
-  float y = lua_tonumber(L, 2);
-  float w = lua_tonumber(L, 3);
-  float h = lua_tonumber(L, 4);
-  int cn = lua_tointeger(L, 5);
-  int cn2 = lua_tointeger(L, 6);
-  int cn3 = lua_tointeger(L, 7);
-  int cmode = lua_tointeger(L, 8);
+int runLuaGame::l_cls(lua_State* L) {
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int n = lua_tointeger(L, 1);
 
+  uint8_t r, g, b;
+  if (n >= 0 && n < sizeof(clist2) / sizeof(clist2[0])) {
+    r = clist2[n][0];
+    g = clist2[n][1];
+    b = clist2[n][2];
+  } else {
+    r = g = b = 0; // Default to black color if n is out of range
+  }
+
+  self->col[0] = r; // 5bit
+  self->col[1] = g; // 6bit
+  self->col[2] = b; // 5bit
+
+  tft.fillRect(0, 0, TFT_WIDTH, TFT_HEIGHT, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
+  // tft.fillScreen(lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
+
+  return 0;
+}
+
+int runLuaGame::l_fillrect(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int x = lua_tointeger(L, 1);
+  int y = lua_tointeger(L, 2);
+  int w = lua_tointeger(L, 3);
+  int h = lua_tointeger(L, 4);
+  int cn = lua_tointeger(L, 5);
+
+
+  
   if(cn != NULL)
   {
-    self->col[0] = self->clist[cn][0]; // 5bit
-    self->col[1] = self->clist[cn][1]; // 6bit
-    self->col[2] = self->clist[cn][2]; // 5bit
-  }
+    // self->col[0] = clist2[cn][0]; // 5bit
+    // self->col[1] = clist2[cn][1]; // 6bit
+    // self->col[2] = clist2[cn][2]; // 5bit
 
-  if(cn3 != NULL)
-  {
-    self->col[0] = cn; // 5bit
-    self->col[1] = cn2; // 6bit
-    self->col[2] = cn3; // 5bit
-  }
-
-  if(cmode!=NULL||cmode==1){//cmode1のときはｈｓｂ
-    // HSBからRGBに変換
-    int r, g, b;
-    self->hsbToRgb(cn, cn2, cn3, r, g, b);
-
-    // RGB値を設定
-    self->col[0] = r; // Red
-    self->col[1] = g; // Green
-    self->col[2] = b; // Blue
-
-    tft.fillRect(x, y, w, h, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
-  }
-  else
-  {
-    tft.fillRect(x, y, w, h, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
+    tft.fillRect(x, y, w, h, gethaco3Col(cn));
+  }else{
+    tft.fillRect(x, y, w, h, gethaco3Col(8));
+    // tft.fillRect(x, y, w, h, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
   }
 
   return 0;
 }
 
-int RunLuaGame::l_drawtri(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+
+extern bool enemyF;
+extern uint8_t enemyX;
+extern uint8_t enemyY;
+extern uint8_t enemyTransCn;
+extern String enemyPath;
+
+int runLuaGame::l_rectfill(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int xa = lua_tointeger(L, 1);
+  int ya = lua_tointeger(L, 2);
+  int xb = lua_tointeger(L, 3);
+  int yb = lua_tointeger(L, 4);
+  int cn = lua_tointeger(L, 5);
+  String fn = lua_tostring(L, 6);
+  if(fn == NULL){
+    if(cn != NULL)
+    {
+    self->col[0] = clist2[cn][0]; // 5bit
+    self->col[1] = clist2[cn][1]; // 6bit
+    self->col[2] = clist2[cn][2]; // 5bit
+    }
+    tft.fillRect(xa, ya, xb, yb, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
+  }else if(fn != NULL){//cnを透明対応色にしたい、、、
+    enemyF = true;
+    enemyPath = fn;
+    enemyX = 0;
+    enemyY = 32;
+    enemyX = xa;
+    enemyY = ya;
+    enemyTransCn = cn;
+  }
+  return 0;
+}
+
+// int runLuaGame::l_fillrect(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+//   float x = lua_tonumber(L, 1);
+//   float y = lua_tonumber(L, 2);
+//   float w = lua_tonumber(L, 3);
+//   float h = lua_tonumber(L, 4);
+//   int cn = lua_tointeger(L, 5);
+//   int cn2 = lua_tointeger(L, 6);
+//   int cn3 = lua_tointeger(L, 7);
+//   int cmode = lua_tointeger(L, 8);
+
+//   if(cn != NULL)
+//   {
+//     self->col[0] = clist2[cn][0]; // 5bit
+//     self->col[1] = clist2[cn][1]; // 6bit
+//     self->col[2] = clist2[cn][2]; // 5bit
+//   }
+
+//   if(cn3 != NULL)
+//   {
+//     self->col[0] = cn; // 5bit
+//     self->col[1] = cn2; // 6bit
+//     self->col[2] = cn3; // 5bit
+//   }
+
+//   if(cmode!=NULL||cmode==1){//cmode1のときはｈｓｂ
+//     // HSBからRGBに変換
+//     int r, g, b;
+//     self->hsbToRgb(cn, cn2, cn3, r, g, b);
+
+//     // RGB値を設定
+//     self->col[0] = r; // Red
+//     self->col[1] = g; // Green
+//     self->col[2] = b; // Blue
+
+//     tft.fillRect(x, y, w, h, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
+//   }
+//   else
+//   {
+//     tft.fillRect(x, y, w, h, lua_rgb24to16(self->col[0], self->col[1], self->col[2]));
+//   }
+
+//   return 0;
+// }
+
+int runLuaGame::l_drawtri(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int x0 = lua_tointeger(L, 1);
   int y0 = lua_tointeger(L, 2);
   int x1 = lua_tointeger(L, 3);
@@ -686,9 +1367,9 @@ int RunLuaGame::l_drawtri(lua_State* L){
   int cn3 = lua_tointeger(L, 9);
   if(cn != NULL)
   {
-    self->col[0] = self->clist[cn][0]; // 5bit
-    self->col[1] = self->clist[cn][1]; // 6bit
-    self->col[2] = self->clist[cn][2]; // 5bit
+    self->col[0] = clist2[cn][0]; // 5bit
+    self->col[1] = clist2[cn][1]; // 6bit
+    self->col[2] = clist2[cn][2]; // 5bit
   }
   if(cn3 != NULL)
   {
@@ -700,7 +1381,7 @@ int RunLuaGame::l_drawtri(lua_State* L){
   return 0;
 }
 
-void RunLuaGame::hsbToRgb2(float angle, float br, int& r, int& g, int& b) {
+void runLuaGame::hsbToRgb2(float angle, float br, int& r, int& g, int& b) {
   if (angle != -1) {
     float hue = angle / 360.0f;  // 角度を0から1の範囲に正規化
 
@@ -730,7 +1411,7 @@ void RunLuaGame::hsbToRgb2(float angle, float br, int& r, int& g, int& b) {
   }
 }
 
-void RunLuaGame::hsbToRgb(float angle, float si, float br, int& r, int& g, int& b) {
+void runLuaGame::hsbToRgb(float angle, float si, float br, int& r, int& g, int& b) {
 
   if(angle!=-1){
   float hue = angle / 360.0f;  // 角度を0から1の範囲に正規化
@@ -794,8 +1475,8 @@ void RunLuaGame::hsbToRgb(float angle, float si, float br, int& r, int& g, int& 
   }
 }
 
-void RunLuaGame::fillFastTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t c1){
-// void RunLuaGame::fillFastTriangle(float x0, float y0, float x1, float y1, float x2, float y2, uint16_t c1){
+void runLuaGame::fillFastTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t c1){
+// void runLuaGame::fillFastTriangle(float x0, float y0, float x1, float y1, float x2, float y2, uint16_t c1){
 
   tft.setColor(c1);
   int16_t a, b;
@@ -885,8 +1566,8 @@ void RunLuaGame::fillFastTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1
 }
 
 
-int RunLuaGame::l_filltri(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_filltri(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int x0 = lua_tointeger(L, 1);
   int y0 = lua_tointeger(L, 2);
   int x1 = lua_tointeger(L, 3);
@@ -899,9 +1580,9 @@ int RunLuaGame::l_filltri(lua_State* L){
   int cmode = lua_tointeger(L, 10);
   if(cn != NULL)
   {
-    self->col[0] = self->clist[cn][0]; // 5bit
-    self->col[1] = self->clist[cn][1]; // 6bit
-    self->col[2] = self->clist[cn][2]; // 5bit
+    self->col[0] = clist2[cn][0]; // 5bit
+    self->col[1] = clist2[cn][1]; // 6bit
+    self->col[2] = clist2[cn][2]; // 5bit
   }
 
   if(cn3 != NULL)
@@ -932,8 +1613,8 @@ int RunLuaGame::l_filltri(lua_State* L){
   return 0;
 }
 
-int RunLuaGame::l_fillcircle(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_fillcircle(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 
   float x = lua_tonumber(L, 1);
   float y = lua_tonumber(L, 2);
@@ -943,8 +1624,8 @@ int RunLuaGame::l_fillcircle(lua_State* L){
   return 0;
 }
 
-int RunLuaGame::l_drawcircle(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_drawcircle(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 
   float x = lua_tonumber(L, 1);
   float y = lua_tonumber(L, 2);
@@ -954,39 +1635,16 @@ int RunLuaGame::l_drawcircle(lua_State* L){
   return 0;
 }
 
-int RunLuaGame::l_phbtn(lua_State* L){
-  int n = lua_tointeger(L, 1);
-  int n2 = lua_tointeger(L, 2);
 
-  if(n2!=NULL){
-
-    //アナログジョイスティックの場合
-    lua_pushinteger(L, (lua_Integer)ui.getPhVolVec(n, n2));
-   
-
-  }else if(n2==NULL){
-
-    if(n == 2){
-      lua_pushinteger(L, (lua_Integer)ui.getPhVolDir(n));//-1と0~7方向番号を返す//４アナログスイッチの場合
-      // Serial.print(ui.getPhVolDir(n));
-    }
-  }else if(n == 3){
-    lua_pushinteger(L, (lua_Integer)ui.getPhVol(n));//生のデータを返す(ボリュームの場合)
-  }
-  
-  return 1;
-}
-
-
-int RunLuaGame::l_key(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_key(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 
   lua_pushstring(L, &keychar);
   return 1;
 }
 
-int RunLuaGame::l_btn(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_btn(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int n = lua_tointeger(L, 1);
   int n2 = lua_tointeger(L, 2);
   float addval = lua_tonumber(L, 3);
@@ -1005,16 +1663,57 @@ int RunLuaGame::l_btn(lua_State* L){
   return 1;
 }
 
-int RunLuaGame::l_touch(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_touch(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   // int n = lua_tointeger(L, 1);
-  lua_pushinteger(L, (lua_Integer)self->touchState);
+  // lua_pushinteger(L, (lua_Integer)self->touchState);
   return 1;
 }
 
-int RunLuaGame::l_btnp(lua_State* L)
+void getPalValue(uint8_t palNo){
+  //外部カラーパレットを読み込む
+  File fr = SPIFFS.open("/init/param/pal/" + String(palNo) + ".txt", "r");
+  String line;
+  uint8_t j = 0;
+  while (fr.available()) {
+    line = fr.readStringUntil('\n');
+    
+    if (!line.isEmpty()) {
+      int commaIndex = line.indexOf(',');
+      if (commaIndex != -1) {
+        String val = line.substring(0, commaIndex);
+        clist2[j][0] = val.toInt();
+        // Serial.print(val);
+        // Serial.print(",");
+          for (int i = 1; i < 3; i++) {
+            int nextCommaIndex = line.indexOf(',', commaIndex + 1);
+            if (nextCommaIndex != -1) {
+              val = line.substring(commaIndex + 1, nextCommaIndex);
+              // Serial.print(val);
+              // Serial.print(",");
+              clist2[j][i] = val.toInt(); // uint8_tに直接キャストする必要はありません
+              commaIndex = nextCommaIndex;
+            }
+          }
+      }
+      j++;
+      // Serial.println("");
+    }
+  }
+  fr.close();
+}
+
+int runLuaGame::l_pal(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  int palno = lua_tointeger(L, 1);
+  getPalValue(palno);
+  return 0;
+}
+
+
+int runLuaGame::l_btnp(lua_State* L)
 {
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int n = lua_tointeger(L, 1);
 
   if(buttonState[n] <= 15){
@@ -1022,7 +1721,7 @@ int RunLuaGame::l_btnp(lua_State* L)
     else{lua_pushboolean(L, false);}
   }else{
     if(buttonState[n]%4 == 0){
-      Serial.println("定期的にtrue");
+      // Serial.println("定期的にtrue");
       lua_pushboolean(L, true);
     }else{
       lua_pushboolean(L, false);
@@ -1031,9 +1730,9 @@ int RunLuaGame::l_btnp(lua_State* L)
   return 1;
 }
 
-int RunLuaGame::l_sldr(lua_State* L)
+int runLuaGame::l_sldr(lua_State* L)
 {
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int xy = lua_tointeger(L, 1);
   
   // if(xy==0||xy==1){
@@ -1043,15 +1742,15 @@ int RunLuaGame::l_sldr(lua_State* L)
   return 1;
 }
 
-// int RunLuaGame::l_iswifidebug(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+// int runLuaGame::l_iswifidebug(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 
 //   lua_pushboolean(L, isWifiDebug()?1:0);
 //   return 1;
 // }
 
-// int RunLuaGame::l_getip(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+// int runLuaGame::l_getip(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 //   char buf[16];
 //   IPAddress ip = WiFi.localIP();
 //   if(self->wifiDebugSelf){
@@ -1064,8 +1763,8 @@ int RunLuaGame::l_sldr(lua_State* L)
 // }
 
 
-// int RunLuaGame::l_wifiserve(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+// int runLuaGame::l_wifiserve(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 //   self->wifiDebugSelf = false;
 //   if(lua_gettop(L) == 1){
 //     const char* text = lua_tostring(L, 1);
@@ -1078,9 +1777,9 @@ int RunLuaGame::l_sldr(lua_State* L)
 // }
 
 String nowappfileName = "";
-int RunLuaGame::l_run(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
+int runLuaGame::l_run(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
 
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   // const char* file = lua_tostring(L, 1);
   appfileName = lua_tostring(L, 1);
   Serial.println(appfileName);
@@ -1092,8 +1791,8 @@ int RunLuaGame::l_run(lua_State* L){//ファイル名を取得して、そのフ
   return 0;
 }
 
-int RunLuaGame::l_appmode(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_appmode(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   const char* file = lua_tostring(L, 1);
   const int modeno = lua_tointeger(L, 2);
 
@@ -1115,8 +1814,8 @@ int RunLuaGame::l_appmode(lua_State* L){//ファイル名を取得して、そ�
   return 0;
 }
 
-int RunLuaGame::l_appinfo(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_appinfo(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int infono = lua_tointeger(L, 1);
   if(infono == 0){
     appfileName = nowappfileName;
@@ -1128,12 +1827,12 @@ int RunLuaGame::l_appinfo(lua_State* L){//ファイル名を取得して、そ�
 }
 
 
-int RunLuaGame::l_editor(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
+int runLuaGame::l_editor(lua_State* L){//ファイル名を取得して、そのファイルを実行runする
   return 0;
 }
 
-int RunLuaGame::l_list(lua_State* L) {
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_list(lua_State* L) {
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   int modeno = lua_tointeger(L, 1);
 
   if(modeno == -1){
@@ -1182,9 +1881,9 @@ int RunLuaGame::l_list(lua_State* L) {
 }
 
 
-// int RunLuaGame::l_require(lua_State* L){
+// int runLuaGame::l_require(lua_State* L){
 //   bool loadError = false;
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 //   const char* fname = lua_tostring(L, 1);
 //   File fp = SPIFFS.open(fname, FILE_READ);
 
@@ -1212,8 +1911,8 @@ int RunLuaGame::l_list(lua_State* L) {
 //   return 1;
 // }
 
-// int RunLuaGame::l_httpsget(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+// int runLuaGame::l_httpsget(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 //   const char* host = lua_tostring(L, 1);
 //   const char* path = lua_tostring(L, 2);
 //   WiFiClientSecure client;
@@ -1247,8 +1946,8 @@ int RunLuaGame::l_list(lua_State* L) {
 //   return 1;
 // }
 
-// int RunLuaGame::l_httpsgetfile(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+// int runLuaGame::l_httpsgetfile(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 //   const char* host = lua_tostring(L, 1);
 //   const char* path = lua_tostring(L, 2);
 //   const char* filePath = lua_tostring(L, 3);
@@ -1290,8 +1989,8 @@ int RunLuaGame::l_list(lua_State* L) {
 //   return 0;
 // }
 
-// int RunLuaGame::l_savebmp(lua_State* L){
-//   RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+// int runLuaGame::l_savebmp(lua_State* L){
+//   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 //   const char* path = lua_tostring(L, 1);
 //   uint8_t buf[4];
 //   long* ltmp = (long*) buf;
@@ -1365,22 +2064,22 @@ int RunLuaGame::l_list(lua_State* L) {
 //   return 0;
 // }
 
-int RunLuaGame::l_reboot(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_reboot(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
 
   reboot();
   return 0;
 }
 
-int RunLuaGame::l_debug(lua_State* L){
-  RunLuaGame* self = (RunLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
+int runLuaGame::l_debug(lua_State* L){
+  runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   const char* text = lua_tostring(L, 1);
 
   // Serial.println(text);
   return 0;
 }
 
-String RunLuaGame::getBitmapName(String s){
+String runLuaGame::getBitmapName(String s){
   int p = s.lastIndexOf("/");
   if(p == -1){
     p = 0;
@@ -1388,7 +2087,7 @@ String RunLuaGame::getBitmapName(String s){
   return s.substring(0, p) + "/sprite.bmp";
 }
 
-String RunLuaGame::getPngName(String s){
+String runLuaGame::getPngName(String s){
   int p = s.lastIndexOf("/");
   if(p == -1){
     p = 0;
@@ -1396,17 +2095,17 @@ String RunLuaGame::getPngName(String s){
   return s.substring(0, p) + "/initspr.png";
 }
 
-void RunLuaGame::init(){
+void runLuaGame::init(){
   this->resume();
 }
 
-void RunLuaGame::pause(){
+void runLuaGame::pause(){
   lua_close(L);
 }
 
 extern bool firstBootF;
 
-void RunLuaGame::resume(){//ゲーム起動時のみ一回だけ走る処理（setupのようなもの)
+void runLuaGame::resume(){//ゲーム起動時のみ一回だけ走る処理（setupのようなもの)
 
 // if(firstBootF){
 
@@ -1464,6 +2163,10 @@ luaL_openlibs(L);
   lua_setglobal(L, "tone");
 
   lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_spr8, 1);
+  lua_setglobal(L, "spr8");
+
+  lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_spr, 1);
   lua_setglobal(L, "spr");
 
@@ -1472,12 +2175,20 @@ luaL_openlibs(L);
   lua_setglobal(L, "scroll");
 
   lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_rmap, 1);
+  lua_setglobal(L, "rmap");
+
+  lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_pset, 1);
   lua_setglobal(L, "pset");
 
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_pget, 1);
   lua_setglobal(L, "pget");
+
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_cls, 1);
+  lua_setglobal(L, "cls");
 
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_color, 1);
@@ -1498,6 +2209,22 @@ luaL_openlibs(L);
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_fillrect, 1);
   lua_setglobal(L, "fillrect");
+
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_rectfill, 1);
+  lua_setglobal(L, "rectfill");
+
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_fillp, 1);
+  lua_setglobal(L, "fillp");
+
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_oval, 1);
+  lua_setglobal(L, "oval");
+
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_ovalfill, 1);
+  lua_setglobal(L, "ovalfill");
 
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_fillpoly, 1);
@@ -1528,8 +2255,8 @@ luaL_openlibs(L);
   lua_setglobal(L, "drawcircle");
 
   lua_pushlightuserdata(L, this);
-  lua_pushcclosure(L, l_phbtn, 1);
-  lua_setglobal(L, "phbtn");
+  lua_pushcclosure(L, l_pal, 1);
+  lua_setglobal(L, "pal");
   
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_key, 1);
@@ -1559,9 +2286,9 @@ luaL_openlibs(L);
   // lua_pushcclosure(L, l_iswifidebug, 1);
   // lua_setglobal(L, "iswifidebug");
 
-  // lua_pushlightuserdata(L, this);
-  // lua_pushcclosure(L, l_wifiserve, 1);
-  // lua_setglobal(L, "wifiserve");
+  lua_pushlightuserdata(L, this);
+  lua_pushcclosure(L, l_win, 1);
+  lua_setglobal(L, "win");
 
   lua_pushlightuserdata(L, this);
   lua_pushcclosure(L, l_run, 1);
@@ -1607,12 +2334,8 @@ luaL_openlibs(L);
   // lua_pushcclosure(L, l_savebmp, 1);
   // lua_setglobal(L, "savebmp");
 
-  
 
-  haco8resume();//派生クラスでのみこの位置で実行されるダミー関数
-
-  
-  
+  // haco8resume();//派生クラスでのみこの位置で実行されるダミー関数
 
   File fr;
 
@@ -1645,7 +2368,8 @@ luaL_openlibs(L);
         bitfilter = bitfilter >> 1; // 書き換え対象ビットを一つずらす
     }
 
-    sprbits[i] = bdata;
+    // sprbits[i] = bdata;
+    
     // Serial.print(":");
     // Serial.print(bdata); // 0～255
     // Serial.print(":");
@@ -1674,112 +2398,49 @@ luaL_openlibs(L);
   fr.close();	// ⑫	ファイルを閉じる
   readMap();
 
-  
+//-------------------------------------------
 
-  // SPIFFS.begin(true);//SPIFFSを利用可能にする
+LoadF lf(MAX_CHAR); // 2048 バイトのメモリを確保する例
+lf.f = SPIFFS.open(appfileName, FILE_READ);
 
-  // if(SPIFFS.exists(getPngName(appfileName))){
-  //   sprite64.drawPngFile(SPIFFS, appfileName, 0, 0);
-  // }
-  
-  //後でSDからもファイルを読めるようにする
+char cFileName[32];
+appfileName.toCharArray(cFileName, 32);//char変換
 
-  // SD.begin(true);//SPIFFSを利用可能にする
-
-  // if(SD.exists("/initspr.png")){
-  //   sprite256[0][0].drawPngFile(SPIFFS, "/init/initspr.png", 0, 0);
-  // }
-  
-  File fp = SPIFFS.open(appfileName, FILE_READ);
-
-  tft.fillScreen(TFT_BLACK);
-
-  struct LoadF lf;
-  lf.f = fp;
-
-  char cFileName[32];
-  appfileName.toCharArray(cFileName, 32);//char変換
-  
-  if(lua_load(L, getF, &lf, cFileName, NULL)){//Luaに渡してファイル読み込みに成功したかチェック（成功すると0）
+if (lua_load(L, getF, &lf, cFileName, NULL)){//Luaに渡してファイル読み込みに成功したかチェック（成功すると0）
     printf("error? %s\n", lua_tostring(L, -1));
     Serial.printf("error? %s\n", lua_tostring(L, -1));
     runError = true;//エラーが発生
     errorString = lua_tostring(L, -1);
-  }
+}
 
-  fp.close();
-
-  if (!runError) {
+if (!runError) {
     if (lua_pcall(L, 0, 0, 0)) {
         Serial.printf("init error? %s\n", lua_tostring(L, -1));
         runError = true;
         errorString = lua_tostring(L, -1);
     }
-  }
-
-  ui.clearAddBtns();
-
-  for (int i = 0; i < allAddUiNum; i++) {
-      buttonState[i] = 0;
-  }
-
-  fr = SPIFFS.open("/init/param/modeset.txt", "r");
-  for (int i = 0; i < 1; i++) {
-      String _readStr = fr.readStringUntil(',');
-      modeSelect = atoi(_readStr.c_str());
-  }
-  fr.close();
-  switch(modeSelect){
-        case 0:
-          // setFileName("/init/main.lua");
-          getOpenConfig("/init/param/openconfig.txt");
-
-        break;
-        case 1://ASPモード：共有のWiFiに入るモード（通常はこちらでつなぐ）
-          wifiDebugRequest = true;
-          wifiDebugSelf = false;
-
-        break;
-        case 2://APモード：アクセスポイントになるモード（通常は隠してある）
-          wifiDebugRequest = true;
-          wifiDebugSelf = true;
-          
-        break;
-  }
-
-
-  tft.pushSprite(0, 0);
-  frame=0;
-// }
 }
 
-int RunLuaGame::run(int _remainTime){
+}
 
-  // if(wifiDebugRequest){
-  //   startWifiDebug(wifiDebugSelf);
-  //   wifiMode = SHOW;
-  //   wifiDebugRequest = false;
-  // }
+int runLuaGame::run(int _remainTime){
 
   if(exitRequest){//次のゲームを起動するフラグがたったら
     exitRequest = false;//フラグをリセットして、
     return 1; // exit(1をリターンすることで、main.cppの変数modeを１にする)
   }
 
-  //ボタンを押してからの経過時間を返すための処理
-  // for(int i = 0; i < ui.getAllBtnNum(); i ++){
-  //   if(ui.getEvent() == NO_EVENT)
-  //   {
+  // // for(int i = 0; i < buttonState.size(); i ++){
+  //   for(int i = 0; i < 7; i ++){
+  //   if(pressedBtnID == -1){
   //     buttonState[i] = 0;
+  //   }else if(pressedBtnID == i){//押されたものだけの値をあげる
+  //     buttonState[i] ++;
   //   }
-
-  //   else if(ui.getEvent() == MOVE)
-  //   {
-  //     if(pressedBtnID == i){//押されたものだけの値をあげる
-  //       buttonState[i] ++;
-  //     }
-  //   }
-  for(int i = 0; i < ui.getAllBtnNum(); i ++){
+  // }
+  
+  // // for(int i = 0; i < buttonState.size(); i ++){
+  for(int i = 0; i < 7; i ++){
     if(pressedBtnID == -1){
       buttonState[i] = 0;
     }else if(pressedBtnID == i){//押されたものだけの値をあげる
@@ -1787,103 +2448,31 @@ int RunLuaGame::run(int _remainTime){
     }
   }
 
-  if(ui.getPos().x<256){//UIエリアに入っていなければ
-  //タッチボタンを押してからの経過時間を返すための処理を行う
-    if(ui.getEvent() == NO_EVENT)
-    {
-      touchState = 0;
-    }
-    else if(ui.getEvent() == MOVE)
-    {
-        touchState ++;
-    }
-  }
-  // else{//UIエリアに入ったら
-  // }
-  if(wifiMode == NONE || wifiMode == RUN){
-    if(runError){
+  if(runError){
       tft.setTextSize(1);
-      tft.setTextColor(TFT_WHITE, TFT_RED);
+      tft.setTextColor(TFT_WHITE, TFT_BLUE);
       tft.setCursor(0, 0);
       tft.setTextWrap(true);
       tft.print(errorString);
       tft.setTextWrap(false);
     }else{
-      if(firstLoopF == true){
-        if(luaL_dostring(L, "_init()")){
-          lua_pop(L, 1);
-          // Serial.printf("run error? %s\n", lua_tostring(L, -1));
-          // runError = true;
-          // errorString = lua_tostring(L, -1);
+        if (firstLoopF) {
+          luaL_dostring(L, "_init()");
+          firstLoopF = false;
         }
-        firstLoopF = false;
-      }
+        luaL_dostring(L, "_update()");
 
-      if(luaL_dostring(L, "_update()")){
-        lua_pop(L, 1);
-        Serial.printf("run error? %s\n", lua_tostring(L, -1));
-        runError = true;
-        errorString = lua_tostring(L, -1);
-      }
-
-      // else if(luaL_dostring(L, "loop()")){
-      //   Serial.printf("run error? %s\n", lua_tostring(L, -1));
-      //   runError = true;
-      //   errorString = lua_tostring(L, -1);
-      // }
-
-      if(luaL_dostring(L, "_draw()")){
-        lua_pop(L, 1);
-        // Serial.printf("run error? %s\n", lua_tostring(L, -1));
-        // runError = true;
-        // errorString = lua_tostring(L, -1);
-      }
+        if(luaL_dostring(L, "_draw()")){
+          lua_pop(L, 1);//最後に入れないとダメ
+        }
     }
-  }else if(wifiMode == SELECT){
-    tft.fillRect(0, 0, 128, 64, lua_rgb24to16(64,64,64));
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_WHITE, TFT_BLUE);
-    tft.setCursor(0, 0);
-    tft.print("pause");
-    tft.setCursor(0, 8);
-    tft.print("  WiFi AP");
-    tft.setCursor(0, 16);
-    tft.print("  WiFi STA");
-    tft.setCursor(0, 24);
-    tft.print("  load /init/main.lua");
-    tft.setCursor(0, (modeSelect + 1) * 8);
-    tft.print(">");
-    
-  }else if(wifiMode == SHOW){
-    // if(buttonState[9]){ // reload//ブルーメニューをとじてwifionのまま戻る
-    //   wifiMode = RUN;
-    // }
-  }
 
-  // show FPS
-  // sprintf(str, "%02dFPS", 1000/_remainTime); // FPS
-
-  // tft.setTextSize(1);
-  // tft.setTextColor(TFT_WHITE, TFT_BLUE);
-  // tft.setCursor(90, 127 - 16);
-  // tft.print(str);
-
-  // sprintf(str, "%02dms", _remainTime); // ms
-  // tft.setCursor(90, 127 - 8);
-  // tft.print(str);
-  
   //show FPS:ms
   tft.setTextColor(TFT_WHITE, TFT_BLUE);
   tft.setCursor(90, 127 - 16);
   tft.print(String(1000/_remainTime) + "FPS");
   tft.setCursor(90, 127 - 8);
   tft.print(String(_remainTime) + "ms");
-
-  // int wait = 1000/30 - _remainTime;
-  // if(wait > 0){
-  //   delay(wait);
-  // }
-  // frame++;
 
   return 0;
 }

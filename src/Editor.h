@@ -17,8 +17,27 @@
 #define ABUF_INIT {NULL, 0}
 
 //メモリが足りない場合に、エディタの表示文字列を少なくする
-#define EDITOR_ROWS 11
-#define EDITOR_COLS 20
+// #define EDITOR_ROWS 11
+// #define EDITOR_COLS 20
+#define EDITOR_ROWS 16
+#define EDITOR_COLS 26
+
+extern int HACO3_C0;
+extern int HACO3_C1;
+extern int HACO3_C2;
+extern int HACO3_C3;
+extern int HACO3_C4;
+extern int HACO3_C5;
+extern int HACO3_C6;
+extern int HACO3_C7;
+extern int HACO3_C8;
+extern int HACO3_C9;
+extern int HACO3_C10;
+extern int HACO3_C11;
+extern int HACO3_C12;
+extern int HACO3_C13;
+extern int HACO3_C14;
+extern int HACO3_C15;
 
 class Editor {
 
@@ -29,23 +48,6 @@ class Editor {
 
   int keyMillis = 0;
   int keywaitTime = 200;
-  
-  static constexpr int HACO3_C0    = 0x0000;
-  static constexpr int HACO3_C1    = 6474;//27,42,86 
-  static constexpr int HACO3_C2    = 35018;
-  static constexpr int HACO3_C3    = 1097;
-  static constexpr int HACO3_C4    = 45669;
-  static constexpr int HACO3_C5    = 25257;
-  static constexpr int HACO3_C6    = 50712;
-  static constexpr int HACO3_C7    = 65436;
-  static constexpr int HACO3_C8    = 63496;//0xF802;
-  static constexpr int HACO3_C9    = 64768;
-  static constexpr int HACO3_C10   = 65376;
-  static constexpr int HACO3_C11   = 1856;
-  static constexpr int HACO3_C12   = 1407;
-  static constexpr int HACO3_C13   = 33715;
-  static constexpr int HACO3_C14   = 64341;
-  static constexpr int HACO3_C15   = 65108;
 
   struct abuf {
     char *b;
@@ -111,8 +113,8 @@ class Editor {
     void editorFreeRow(erow *row);
     void editorSave(fs::FS &fs);
     // void editorSaveSD(fs::FS &fs);
-    char *editorRowsToString(int *buflen);
 
+    char *editorRowsToString(int *buflen);
     int getTargetTime();
     void setTargetTime(int _targetTime);
 
@@ -124,19 +126,17 @@ class Editor {
     int getPreCx();
     int getPreRx();
 
-
     int getScreenCol();
     int getScreenRow();
 
     bool getShiftF();
-
     // void editorPageMove(int c, KbdRptParser &Prs);
     void editorPageMove(char c);
 
     int utf8_char_width(char c);
     // void update(LovyanGFX& tft,fs::FS &fs, fs::FS &SD, KbdRptParser &Prs);
     // void update(LovyanGFX& tft, fs::FS &fs, fs::FS &SD, char _keychar);
-    void update(LovyanGFX& tft, fs::FS &fs, char _keychar);
+    void update(LovyanGFX& tft, fs::FS &fs, int _keychar);
     void writeFile(fs::FS &fs, const char * path, const char * message);
     void appendFile(fs::FS &fs, const char * path, const char * message);
 
