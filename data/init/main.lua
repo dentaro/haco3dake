@@ -134,14 +134,14 @@ function drawUtil()
       run("/init/main.lua")
     elseif cursor == 1 then
      --ATPモード：共有のWifiに入るモード（通常はこちら/init/param/wifipass.txtを書き換えることで設定できる）
-      if not(iswifidebug()) then
-        wifiserve()
-      end
+      -- if not(iswifidebug()) then
+      --   wifiserve()
+      -- end
     elseif cursor == 2 then
      --APモード：ESP32自体がアクセスポイントになるモード
-      if not(iswifidebug()) then
-        wifiserve("ap")
-      end
+      -- if not(iswifidebug()) then
+      --   wifiserve("ap")
+      -- end
     elseif cursor == 3 then
       reboot()
     elseif cursor == 4 then
