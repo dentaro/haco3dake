@@ -37,7 +37,6 @@ static int menu_w = 120;
 static int menu_h = 30;
 static int menu_padding = 36;
 
-
 #define KEYBOARD_DATA 22//32
 #define KEYBOARD_CLK  19//33
 
