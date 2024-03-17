@@ -72,6 +72,51 @@ extern int gameState;
 // extern void getOpenConfig(String _wrfile);
 extern uint16_t gethaco3Col(uint8_t haco3ColNo);
 
+
+  struct Obj {
+    float x;
+    float y;
+    float z;
+    float angle;
+    float scale;
+    int colangle;
+    int h;
+    int s;
+    int v;
+    int r;
+    int g;
+    int b;
+    int width;
+    int height;
+
+    std::vector<Vector3<float>> op;
+    std::vector<Vector3<float>> p;
+    // コンストラクタで初期値を設定
+    Obj()
+        : x(0), y(0), z(0), angle(0), scale(1.0),colangle(120), width(10), height(10)
+    {
+    }
+    };
+
+
+
+
+// Obj 構造体の動的配列を作成
+    std::vector<Obj> objects;
+
+
+int BSTARBUFNUM = 1000;
+// extern std::vector<std::vector<float>> bsParamFloat;
+// extern std::vector<std::vector<uint8_t>> bsParamInt8t;
+// extern std::vector<std::vector<uint16_t>> bsParamInt16t;
+// std::vector<std::vector<float>> bsParamFloat;
+// std::vector<std::vector<uint8_t>> bsParamInt8t;
+// std::vector<std::vector<uint16_t>> bsParamInt16t;
+
+float bsParamFloat[1000][2];
+uint8_t bsParamInt8t[1000][1];
+uint16_t bsParamInt16t[1000][1];
+
 int cursor = 0;
 
 uint16_t hacol0;
@@ -123,6 +168,9 @@ int bytesRead;
 //   {255, 105, 173}, // 14: ピンク
 //   {255, 203, 165}  // 15: 桃色
 // };
+
+    std::vector<Vector3<float>> opg;
+    std::vector<Vector3<float>> pg;
 
 
 extern "C" {
@@ -899,24 +947,18 @@ int runLuaGame::l_pget(lua_State* L){
   return 4;
 }
 
-int numCorners = 24;
-int numRings = numCorners / 2 + 1;
-int numVertices = numCorners * numRings;
+
+int numVertices;//すべての頂点数
 float deg = 0;
-float cdeg = 360.0f/ float(numCorners);
+
 
   Vector3<float> myop;
   Vector3<float> myp;
 
-std::vector<Vector3<float>> opg;
-std::vector<Vector3<float>> pg;
-std::vector<Vector3<float>> op;
-std::vector<Vector3<float>> p;
-
-int BSTARBUFNUM = 1000;
-float bsParamFloat[1000][2];
-uint8_t bsParamInt8t[1000][1];
-uint16_t bsParamInt16t[1000][1];
+// std::vector<Vector3<float>> opg;
+// std::vector<Vector3<float>> pg;
+// std::vector<Vector3<float>> op;
+// std::vector<Vector3<float>> p;
 
 int runLuaGame::l_creobj(lua_State* L){
   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
@@ -929,6 +971,9 @@ int runLuaGame::l_creobj(lua_State* L){
     //     pg.push_back(initp);
 
     // }
+    int numCorners = 24;//輪切りにした時の頂点数
+    int numRings = numCorners / 2 + 1;//縦方向の頂点数
+    float cdeg = 360.0f/ float(numCorners);
 
     //オブジェクトを生成
     for (int j = 0; j < numRings; j++) 
@@ -953,13 +998,13 @@ int runLuaGame::l_creobj(lua_State* L){
     for(int i=0; i<BSTARBUFNUM; i++){//星の数だけ
 
       Vector3<float> initp;
-      op.push_back(initp);
-      p.push_back(initp);
+      objects[0].op.push_back(initp);
+      objects[0].p.push_back(initp);
       
       //星の３次元座標を求めてオリジナルポジションに入れる
-      op[i].setX(cos(bsParamFloat[i][1]) * cos(bsParamFloat[i][0]));
-      op[i].setZ(cos(bsParamFloat[i][1]) * sin(bsParamFloat[i][0]));
-      op[i].setY(sin(bsParamFloat[i][1]));
+      objects[0].op[i].setX(cos(bsParamFloat[i][1]) * cos(bsParamFloat[i][0]));
+      objects[0].p[i].setZ(cos(bsParamFloat[i][1]) * sin(bsParamFloat[i][0]));
+      objects[0].p[i].setY(sin(bsParamFloat[i][1]));
 
     }
 
@@ -971,9 +1016,9 @@ int runLuaGame::l_creobj(lua_State* L){
     //   pg.push_back(initp);
       
     //   //星の３次元座標を求めてオリジナルポジションに入れる
-    //   opg[i].setX(cos(bsParamFloat[i][1]) * cos(bsParamFloat[i][0]));
-    //   opg[i].setZ(cos(bsParamFloat[i][1]) * sin(bsParamFloat[i][0]));
-    //   opg[i].setY(sin(bsParamFloat[i][1]));
+      // opg[i].setX(cos(bsParamFloat[i][1]) * cos(bsParamFloat[i][0]));
+      // opg[i].setZ(cos(bsParamFloat[i][1]) * sin(bsParamFloat[i][0]));
+      // opg[i].setY(sin(bsParamFloat[i][1]));
 
     // }
 
@@ -1935,7 +1980,9 @@ float dmsToRadian(int degrees, int minutes, float seconds) {
     return (degrees + minutes / 60.0 + seconds / 3600.0) * RAD_ONE;// 1度 = 60分 = 3600秒
 }
 
-
+#include <vector>
+#include <iostream>
+#include <string>
 int runLuaGame::l_initstars(lua_State* L) 
 {
   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
@@ -1947,13 +1994,17 @@ int runLuaGame::l_initstars(lua_State* L)
   float _dec_s  = lua_tonumber(L, 6);
   int zoom = lua_tointeger(L, 7);
 
+  // 1000個の要素を事前に確保する
+  // bsParamFloat.resize(BSTARBUFNUM, std::vector<float>(2));
+  // bsParamInt8t.resize(BSTARBUFNUM, std::vector<uint8_t>(1));
+  // bsParamInt16t.resize(BSTARBUFNUM, std::vector<uint16_t>(1));
+
   // 赤経の中心と幅を指定
   float centerRightAscension = hmsToRadian( _asc_h, _asc_m, _asc_s ); // 中心の赤経（時分秒をラジアンに変換する関数）
   float centerDeclination    = dmsToRadian( _dec_d, _dec_m, _dec_s );// 中心の赤緯（度分秒をラジアンに変換する関数）
   
   float halfWidthRightAscension = (M_PI / zoom); // 赤経の半幅（ラジアン）
   float halfHeightDeclination = (M_PI / zoom);// 赤緯の半幅（ラジアン）
-
 
   if (SPIFFS.exists("/star/brightstar1000.csv")) {
     File fr = SPIFFS.open("/star/brightstar1000.csv", FILE_READ);
@@ -2029,13 +2080,44 @@ int runLuaGame::l_initstars(lua_State* L)
             while (line.length() > 0) {
               int commaIndex = line.indexOf(',');
               if (commaIndex != -1) {
+
                 String val = line.substring(0, commaIndex);
-                // starData[currentIndex] = val;
+                // std::string val(str_val.begin(), str_val.end());
 
                 if(currentIndex==0)bsParamFloat[i][0] = val.toFloat();
                 else if(currentIndex==1)bsParamFloat[i][1] = val.toFloat();
                 else if(currentIndex==2)bsParamInt8t[i][0] = val.toInt();
                 else if(currentIndex==3)bsParamInt16t[i][0] = val.toInt();
+
+                //      if (currentIndex == 0)
+                //     bsParamFloat[i][0] = std::atof(val.c_str());
+                // else if (currentIndex == 1)
+                //     bsParamFloat[i][1] = std::atof(val.c_str());
+                // else if (currentIndex == 2)
+                //     bsParamInt8t[i][0] = std::atoi(val.c_str());
+                // else if (currentIndex == 3)
+                //     bsParamInt16t[i][0] = std::atoi(val.c_str());
+
+    //                 if (currentIndex == 0) {
+    //     if (bsParamFloat.size() <= i) // i番目の要素が存在しない場合
+    //         bsParamFloat.resize(i + 1); // 要素を追加する
+    //     bsParamFloat[i].push_back(std::stof(val)); // 要素に値を追加する
+    // }
+    // else if (currentIndex == 1) {
+    //     if (bsParamFloat.size() <= i) // i番目の要素が存在しない場合
+    //         bsParamFloat.resize(i + 1); // 要素を追加する
+    //     bsParamFloat[i].push_back(std::stof(val)); // 要素に値を追加する
+    // }
+    // else if (currentIndex == 2) {
+    //     if (bsParamInt8t.size() <= i) // i番目の要素が存在しない場合
+    //         bsParamInt8t.resize(i + 1); // 要素を追加する
+    //     bsParamInt8t[i].push_back(std::stoi(val)); // 要素に値を追加する
+    // }
+    // else if (currentIndex == 3) {
+    //     if (bsParamInt16t.size() <= i) // i番目の要素が存在しない場合
+    //         bsParamInt16t.resize(i + 1); // 要素を追加する
+    //     bsParamInt16t[i].push_back(std::stoi(val)); // 要素に値を追加する
+    // }
 
                 currentIndex++;
                 line = line.substring(commaIndex + 1);
@@ -2050,6 +2132,10 @@ int runLuaGame::l_initstars(lua_State* L)
         currentLine++;
       }
     fr.close();
+
+    
+    
+    
   }
   return 0;
 }
@@ -2992,7 +3078,7 @@ void runLuaGame::line3D(const Vector3<float> v1,const Vector3<float> v2,uint16_t
 }
 
 
-void runLuaGame::triangle3D(const Vector3<float> v1,const Vector3<float> v2,const Vector3<float> v3) {
+void runLuaGame::triangle3D(const Vector3<float> v1,const Vector3<float> v2,const Vector3<float> v3, int idx) {
   // Vector3<int32_t> p1,p2,p3;
 
   // p1.set(static_cast<int32_t>((v1.getX() + 1.0f) * TFT_WIDTH_HALF),
@@ -3022,8 +3108,6 @@ void runLuaGame::triangle3D(const Vector3<float> v1,const Vector3<float> v2,cons
         // ポリゴンの法線ベクトルと視線ベクトルの角度を計算
         float dotProduct = calculateDotProduct(normal, viewVector);
         float angle1 = degrees(std::acos(dotProduct));
-
-        
 
         // ポリゴンの明るさを計算
         float brightness = static_cast<float>(calculateBrightness(v1, v2, v3, light));
@@ -3057,7 +3141,9 @@ void runLuaGame::triangle3D(const Vector3<float> v1,const Vector3<float> v2,cons
           if (area > 0.0f) {
                 // HSBからRGBに変換
             int r, g, b;
-            hsbToRgb(plyObj.colangle, 127, color, r, g, b);
+            // hsbToRgb(plyObj.colangle, 127, color, r, g, b);
+            // hsbToRgb(objects[idx].h, objects[idx].s, objects[idx].v, r, g, b);//面の明るさを一定に
+            hsbToRgb(objects[idx].h, objects[idx].s, color, r, g, b);
 
             byte col[3] = {0,0,0};
 
@@ -3133,9 +3219,9 @@ int runLuaGame::l_rendr(lua_State* L) {
     {
       //world座標変換
       
-      p[i].set( op[i].getX(), 
-                op[i].getY(), 
-                op[i].getZ());
+      objects[0].p[i].set(objects[0].op[i].getX(), 
+                          objects[0].op[i].getY(), 
+                          objects[0].op[i].getZ());
 
       //world座標変換
       // if(sw == 0){
@@ -3155,17 +3241,19 @@ int runLuaGame::l_rendr(lua_State* L) {
       // }
 
       // カメラの移動
-      p[i].setZ(-p[i].getZ() - 1);//カメラの位置0だと表示されない
-      p[i].setZ(-p[i].getZ());//記号を反転させる
-      p[i].setX(p[i].getX() / p[i].getZ()/camera.zoom);
-      p[i].setY(p[i].getY() / p[i].getZ()/camera.zoom);
-      p[i].setZ(p[i].getZ() / 5);
+      objects[0].p[i].setZ(-objects[0].p[i].getZ() - 1);//カメラの位置0だと表示されない
+      objects[0].p[i].setZ(-objects[0].p[i].getZ());//記号を反転させる
+      objects[0].p[i].setX(objects[0].p[i].getX() / objects[0].p[i].getZ()/camera.zoom);
+      objects[0].p[i].setY(objects[0].p[i].getY() / objects[0].p[i].getZ()/camera.zoom);
+      objects[0].p[i].setZ(objects[0].p[i].getZ() / 5);
 
     }
 
     // self->triangle3D(p[0], p[1], p[2]);
     // self->triangle3D(p[0], p[2], p[3]);
     // self->triangle3D(p[0], p[2], p[3]);
+
+    int numCorners = 24;//輪切りにした時の頂点数
 
       for(int i =0;i < numVertices; i++)
       // for(int i = 0; i < BSTARBUFNUM; i++)
@@ -3177,8 +3265,8 @@ int runLuaGame::l_rendr(lua_State* L) {
         int l = j + numCorners;
 
         // if(i < numVertices - numCorners){
-          self->triangle3D(p[i], p[j], p[k]);
-          self->triangle3D(p[j], p[l], p[k]);
+          self->triangle3D(objects[0].p[i], objects[0].p[j], objects[0].p[k],0);
+          self->triangle3D(objects[0].p[j], objects[0].p[l], objects[0].p[k],0);
           // self->fastPoint(p[i]);
 
           int starbrightness = bsParamInt8t[i][0];
@@ -3467,7 +3555,9 @@ int runLuaGame::l_drawstars(lua_State* L) {
     }
     
 
-    
+    int numCorners = 24;//輪切りにした時の頂点数
+    int numRings = numCorners / 2 + 1;//縦方向の頂点数
+
     for(int i =0;i < numVertices; i++)
     {
 
@@ -3540,18 +3630,18 @@ int runLuaGame::l_drawstars(lua_State* L) {
 
     // 座標変換
   for (int i = 0; i < BSTARBUFNUM; i++) {
-      float x = op[i].getX();
-      float y = op[i].getY();
-      float z = op[i].getZ();
+      float x = objects[0].op[i].getX();
+      float y = objects[0].op[i].getY();
+      float z = objects[0].op[i].getZ();
 
       // y軸周りの回転
       float tempX1 = x * cosY - z * sinY;
       float tempZ1 = x * sinY + z * cosY;
 
       // x軸周りの回転
-      p[i].setX(tempX1);
-      p[i].setY(y * cosX + tempZ1 * sinX);
-      p[i].setZ(-y * sinX + tempZ1 * cosX);
+      objects[0].p[i].setX(tempX1);
+      objects[0].p[i].setY(y * cosX + tempZ1 * sinX);
+      objects[0].p[i].setZ(-y * sinX + tempZ1 * cosX);
 
       //world座標変換
       // if(sw == 0){
@@ -3571,11 +3661,11 @@ int runLuaGame::l_drawstars(lua_State* L) {
       // }
 
       // カメラの移動
-      p[i].setZ(-p[i].getZ() - 1);//カメラの位置0だと表示されない
-      p[i].setZ(-p[i].getZ());//記号を反転させる
-      p[i].setX(p[i].getX() / p[i].getZ()/camera.zoom);
-      p[i].setY(p[i].getY() / p[i].getZ()/camera.zoom);
-      p[i].setZ(p[i].getZ() / 5);
+      objects[0].p[i].setZ(-objects[0].p[i].getZ() - 1);//カメラの位置0だと表示されない
+      objects[0].p[i].setZ(-objects[0].p[i].getZ());//記号を反転させる
+      objects[0].p[i].setX(objects[0].p[i].getX() / objects[0].p[i].getZ()/camera.zoom);
+      objects[0].p[i].setY(objects[0].p[i].getY() / objects[0].p[i].getZ()/camera.zoom);
+      objects[0].p[i].setZ(objects[0].p[i].getZ() / 5);
   }
 
 //星を描画
@@ -3584,7 +3674,7 @@ int runLuaGame::l_drawstars(lua_State* L) {
 
       int starbrightness = bsParamInt8t[i][0];
       int noInt = bsParamInt16t[i][0];
-      self->fastPoint(p[i], starbrightness, noInt);
+      self->fastPoint(objects[0].p[i], starbrightness, noInt);
                   
     }
     }
@@ -3593,67 +3683,113 @@ int runLuaGame::l_drawstars(lua_State* L) {
     return 0;
 }
 
-
+int objno = 0;
 
 int runLuaGame::l_creobj2(lua_State* L){
   runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
   
-    //グリッド生成
-    // for (int i = 0; i < numRings*numCorners; i++) //=numVertices
-    // {   //ベクター配列を初期化
-    //     Vector3<float> initp;
-    //     opg.push_back(initp);
-    //     pg.push_back(initp);
+  objno = lua_tointeger(L, 1);//カメラのx軸角0~360
 
-    // }
+  float objx = lua_tonumber(L, 2);//オブジェ位置
+  float objy = lua_tonumber(L, 3);
+  float objz = lua_tonumber(L, 4);
 
-    //オブジェクトを生成
-    for (int j = 0; j < numRings; j++) 
+  int objh = lua_tointeger(L, 5);//オブジェ色
+  int objs = lua_tointeger(L, 6);
+  int objv = lua_tointeger(L, 7);
+
+  float scale = lua_tonumber(L, 8);
+  // Obj 構造体を作成し、値を設定し、動的配列に追加する
+  Obj obj;
+  obj.x = objx;
+  obj.y = objy;
+  obj.z = objz;
+  obj.h = objh;
+  obj.s = objs;
+  obj.v = objv;
+
+  obj.scale = scale; // ここでサイズの初期値を設定します
+
+  obj.angle = 0; // ここで角度の初期値を設定します
+  obj.colangle = 120; // ここで色の初期値を設定します
+  obj.width = 10; // ここで幅の初期値を設定します
+  obj.height = 10; // ここで高さの初期値を設定します
+
+  // 動的配列に追加
+  objects.push_back(obj);
+  uint8_t lastno =objects.size() - 1;
+
+  if(objno==0)
+  {
+    int numCorners = 24;//輪切りにした時の頂点数
+    int numRings = numCorners / 2 + 1;//縦方向の頂点数
+    numVertices = numCorners * numRings;//すべての頂点数
+    float cdeg = 360.0f/ float(numCorners);
+  
+    //球オブジェクトを生成
+    for (int j = 0; j < numRings; j++) //13
     {
-      float r = sin(cdeg * j * RAD_ONE);
+      // float r = sin(cdeg * j * RAD_ONE);
       float y = cos(cdeg * j * RAD_ONE);
-      for(int i=0;i<numCorners; i++){
 
-        int k = j * numCorners + i;
+      for(int i=0;i<numCorners; i++){//24
+        int k = j * numCorners + i;//k番目の頂点
+        for(int n=0; n < 3; n++){//xyz分３を確保
+          //ベクター配列を初期化
+          Vector3<float> initp;
+          objects[lastno].op.push_back(initp);
+          objects[lastno].p.push_back(initp);
+        }
 
-        //ベクター配列を初期化
-        Vector3<float> initp;
-        opg.push_back(initp);
-        pg.push_back(initp);
+        // objects[lastno].op[k].setX((sin(i*cdeg*RAD_ONE) )*obj.scale);//輪切り状態のX
+        // objects[lastno].op[k].setZ((cos(i*cdeg*RAD_ONE) )*obj.scale);//輪切り状態のY
+        // objects[lastno].op[k].setY(y*obj.scale);//高さ方向
 
-        opg[k].setX(sin(i*cdeg*RAD_ONE) * r);
-        opg[k].setZ(cos(i*cdeg*RAD_ONE) * r);
-        opg[k].setY(y);
+        objects[lastno].op[k].set(obj.x+(sin(((i * cdeg)-45) * RAD_ONE) )*obj.scale,
+                                  obj.y+ y*obj.scale,
+                                  obj.z+(cos(((i * cdeg)-45) * RAD_ONE) )*obj.scale);
+      }
+    }
+  }
+  else if(objno==1){//立方体オブジェクトを生成
+
+    for (int i = 0; i < 8; i++)
+    {
+      for(int n = 0; n < 3; n++)
+      {
+          // ベクター配列を初期化
+          Vector3<float> initp;
+          objects[lastno].op.push_back(initp);
+          objects[lastno].p.push_back(initp);
       }
     }
 
-    for(int i=0; i<BSTARBUFNUM; i++){//星の数だけ
+    int numCorners = 4; // 輪切りにした時の頂点数
+    int numRings = 2; // 縦方向の頂点数
+    numVertices = numCorners * numRings; // すべての頂点数
+    float cdeg = (360.0f) / float(numCorners);
+  
+    // 立方体オブジェクトを生成
+    for (int j = 0; j < numRings; j++) {
+        for(int i = 0; i < numCorners; i++) {
+            int k = j * numCorners + i; // k番目の頂点
 
-      Vector3<float> initp;
-      op.push_back(initp);
-      p.push_back(initp);
-      
-      //星の３次元座標を求めてオリジナルポジションに入れる
-      op[i].setX(cos(bsParamFloat[i][1]) * cos(bsParamFloat[i][0]));
-      op[i].setZ(cos(bsParamFloat[i][1]) * sin(bsParamFloat[i][0]));
-      op[i].setY(sin(bsParamFloat[i][1]));
+            for(int n = 0; n < 3; n++) {
+                // ベクター配列を初期化
+                Vector3<float> initp;
+                objects[lastno].op.push_back(initp);
+                objects[lastno].p.push_back(initp);
+            }
 
+            float y = cos((cdeg * j) * RAD_ONE)*2;
+
+            objects[lastno].op[k].set(obj.x + sin(((i * cdeg)-45) * RAD_ONE)*obj.scale,
+                                      obj.y + y*obj.scale,
+                                      obj.z + cos(((i * cdeg)-45) * RAD_ONE)*obj.scale);
+
+        }
     }
-
-
-    // for(int i=0; i<numVertices; i++){//グリッドの数だけ
-
-    //   Vector3<float> initp;
-    //   opg.push_back(initp);
-    //   pg.push_back(initp);
-      
-    //   //星の３次元座標を求めてオリジナルポジションに入れる
-    //   opg[i].setX(cos(bsParamFloat[i][1]) * cos(bsParamFloat[i][0]));
-    //   opg[i].setZ(cos(bsParamFloat[i][1]) * sin(bsParamFloat[i][0]));
-    //   opg[i].setY(sin(bsParamFloat[i][1]));
-
-    // }
-
+  }
     return 0; // テーブルをスタックに返す
 }
 
@@ -3661,35 +3797,30 @@ int runLuaGame::l_creobj2(lua_State* L){
 int runLuaGame::l_rendr2(lua_State* L)
 {
     runLuaGame* self = (runLuaGame*)lua_touserdata(L, lua_upvalueindex(1));
-    // float deg1 = lua_tonumber(L, 1);
-    // float deg2 = lua_tonumber(L, 2);
-    int deg1 = lua_tointeger(L, 1);
-    int deg2 = lua_tointeger(L, 2);
-    int sw = lua_tointeger(L, 3);
-    float zoom = lua_tonumber(L, 4);
+    float camX = lua_tonumber(L, 1);//カメラのx軸角0~360
+    float camY = lua_tonumber(L, 2);//カメラのy軸角0~360
+    float camZ = lua_tonumber(L, 3);//カメラのy軸角0~360
+    int camXangle = lua_tointeger(L, 4);//カメラのx軸角0~360
+    int camYangle = lua_tointeger(L, 5);//カメラのy軸角0~360
+    int sw = lua_tointeger(L, 6);
+    float zoom = lua_tonumber(L, 7);
     camera.zoom = zoom;
 
-    if (deg1 > 360 || deg1 <= 0 ) {
-        // deg1 = fmod(deg1 , 360);
-        deg1%=360;
+    if (camXangle > 360 || camXangle <= 0 ) {
+        // camXangle = fmod(camXangle , 360);
+        camXangle%=360;
     }
 
-    if (deg2 > 360 || deg2 < 0 ) {
-        // deg2 = fmod(deg2 , 360);
-        deg2%=360;
+    if (camYangle > 360 || camYangle < 0 ) {
+        // camYangle = fmod(camYangle , 360);
+        camYangle%=360;
     }
 
-    // float c = gcos(deg1);
-    // float s = gsin(deg1);
+    float c = cos(camXangle*RAD_ONE);
+    float s = sin(camXangle*RAD_ONE);
 
-    // float c2 = gcos(deg2);
-    // float s2 = gsin(deg2);
-
-    float c = cos(deg1*RAD_ONE);
-    float s = sin(deg1*RAD_ONE);
-
-    float c2 = cos(deg2*RAD_ONE);
-    float s2 = sin(deg2*RAD_ONE);
+    float c2 = cos(camYangle*RAD_ONE);
+    float s2 = sin(camYangle*RAD_ONE);
 
     langle += 3;
     langle %= 360;
@@ -3698,14 +3829,14 @@ int runLuaGame::l_rendr2(lua_State* L)
     light.y = 1;//＋が上のよう
     light.z = cos(langle*RAD_ONE);//手前奥
 
+    for (size_t idx = 0; idx < objects.size(); ++idx) {
+
     for(int i =0;i < numVertices; i++)
-    // for(int i = 0; i < BSTARBUFNUM; i++)
     {
       //world座標変換
-      
-      p[i].set( opg[i].getX(), 
-                opg[i].getY(), 
-                opg[i].getZ());
+      objects[idx].p[i].set(objects[idx].op[i].getX()+camX, 
+                            objects[idx].op[i].getY()+camY, 
+                            objects[idx].op[i].getZ()+camZ);
 
       //world座標変換
       // if(sw == 0){
@@ -3714,9 +3845,9 @@ int runLuaGame::l_rendr2(lua_State* L)
       //   p[i].setZ(op[i].getZ());
       // }
       // else if(sw == 1){
-      //   p[i].setX(c * op[i].getX() + -s * op[i].getZ());
-      //   p[i].setY(op[i].getY());
-      //   p[i].setZ(s * op[i].getX() +  c * op[i].getZ());
+        // p[i].setX((c * op[i].getX() + -s * op[i].getZ()));
+        // p[i].setY((op[i].getY()));
+        // p[i].setZ((s * op[i].getX() +  c * op[i].getZ()));
       // }
       // else if(sw == 2){
       //   p[i].setX(op[i].getX());
@@ -3725,21 +3856,20 @@ int runLuaGame::l_rendr2(lua_State* L)
       // }
 
       // カメラの移動
-      // p[i].setZ(-p[i].getZ() - 1);//カメラの位置0だと表示されない
-      // p[i].setZ(-p[i].getZ());//記号を反転させる
-      // p[i].setX(p[i].getX() / p[i].getZ()/camera.zoom);
-      // p[i].setY(p[i].getY() / p[i].getZ()/camera.zoom);
-      // p[i].setZ(p[i].getZ() / 5);
+      objects[idx].p[i].setZ(-objects[idx].p[i].getZ() - 1);//カメラの位置0だと表示されない
+      objects[idx].p[i].setZ(-objects[idx].p[i].getZ());//記号を反転させる
+      objects[idx].p[i].setX(objects[idx].p[i].getX() / objects[idx].p[i].getZ()/camera.zoom);
+      objects[idx].p[i].setY(objects[idx].p[i].getY() / objects[idx].p[i].getZ()/camera.zoom);
+      objects[idx].p[i].setZ(objects[idx].p[i].getZ() / 5);
+  }
 
-    }
+  if(objno == 0){
+    int numCorners = 24;//輪切りにした時の頂点数
+    int numRings = numCorners / 2 + 1;//縦方向の頂点数
 
-    // self->triangle3D(p[0], p[1], p[2]);
-    // self->triangle3D(p[0], p[2], p[3]);
-    // self->triangle3D(p[0], p[2], p[3]);
-
-      for(int i =0;i < numVertices; i++)
-      // for(int i = 0; i < BSTARBUFNUM; i++)
-      {
+    for(int i =0;i < numVertices; i++)
+    // for(int i = 0; i < BSTARBUFNUM; i++)
+    {
         int j = i + 1;
         if(j % numCorners == 0) j -= numCorners;
 
@@ -3747,57 +3877,66 @@ int runLuaGame::l_rendr2(lua_State* L)
         int l = j + numCorners;
 
         // if(i < numVertices - numCorners){
-          self->triangle3D(p[i], p[j], p[k]);
-          self->triangle3D(p[j], p[l], p[k]);
-          // self->fastPoint(p[i]);
+        self->triangle3D(objects[idx].p[i], 
+                         objects[idx].p[j], 
+                         objects[idx].p[k],idx);
+        self->triangle3D(objects[idx].p[j], 
+                         objects[idx].p[l],
+                         objects[idx].p[k],idx);
+        // self->fastPoint(p[i]);
 
-          int starbrightness = bsParamInt8t[i][0];
-          int noInt = bsParamInt16t[i][0];
-
-          // self->fastPoint(p[i], starbrightness, noInt);
-                  
-        // }
-
-        //線を書く
-
-        // self->line3D(p[i], p[j], TFT_CYAN);
-        // if(i < numVertices - numCorners){
-        //   j = i + numCorners;
-        //   self->line3D(p[i], p[j], TFT_BLUE);
-
-        // self->line3D(p[i], p[j], TFT_CYAN);
-
-
-        // if( i < numVertices - numCorners){//赤経をひく
-        //   if( 0 == i % numCorners){//0度
-        //     self->line3D(p[i], p[k], TFT_RED);
-        //   }else{
-        //     self->line3D(p[i], p[j], TFT_BLUE);
-        //   }
-        // }
-
-        // if( i < numVertices - 1){//赤緯をひく
-        //   if( i >= numCorners*(numRings/2) && i < numCorners*(numRings/2+1) ){
-        //     self->line3D(p[i], p[j], TFT_RED);//0度
-        //   }else{
-        //     self->line3D(p[i], p[j], TFT_BLUE);
-        //   }
-        // }
-        
-        //点を書く
-
-        // if( 3 >= i % numCorners){
-        //   if( i <= numCorners*4){
-          // self->point3D(p[i],TFT_WHITE);
-
-          // self->fastPoint(p[i],TFT_WHITE);
-        //   }
-        // }
+        // int starbrightness = bsParamInt8t[i][0];
+        // int noInt = bsParamInt16t[i][0];
       }
-      return 0;
+    }
+    else if(objno==1) {
 
+//       self->triangle3D(objects[0].p[0], objects[0].p[1], objects[0].p[2]);//上面
+//       self->triangle3D(objects[0].p[0], objects[0].p[2], objects[0].p[3]);
 
+//       self->triangle3D(objects[0].p[4], objects[0].p[6], objects[0].p[5]);//下面
+//       self->triangle3D(objects[0].p[4], objects[0].p[7], objects[0].p[6]);
+
+// //後２面
+//       self->triangle3D(objects[0].p[0], objects[0].p[3], objects[0].p[7]);
+//       self->triangle3D(objects[0].p[0], objects[0].p[7], objects[0].p[4]);
+
+//       self->triangle3D(objects[0].p[1], objects[0].p[4], objects[0].p[5]);//右
+//       self->triangle3D(objects[0].p[1], objects[0].p[0], objects[0].p[4]);
+
+// //前２面
+//       self->triangle3D(objects[0].p[3], objects[0].p[6], objects[0].p[7]);
+//       self->triangle3D(objects[0].p[3], objects[0].p[2], objects[0].p[6]);
+
+//       self->triangle3D(objects[0].p[2], objects[0].p[5], objects[0].p[6]);//右
+//       self->triangle3D(objects[0].p[2], objects[0].p[1], objects[0].p[5]);
+
+      // すべてのオブジェクトに対してループ
+      
+          self->triangle3D(objects[idx].p[0], objects[idx].p[1], objects[idx].p[2],idx);//上面
+          self->triangle3D(objects[idx].p[0], objects[idx].p[2], objects[idx].p[3],idx);
+
+          self->triangle3D(objects[idx].p[4], objects[idx].p[6], objects[idx].p[5],idx);//下面
+          self->triangle3D(objects[idx].p[4], objects[idx].p[7], objects[idx].p[6],idx);
+
+          // 後２面
+          self->triangle3D(objects[idx].p[0], objects[idx].p[3], objects[idx].p[7],idx);
+          self->triangle3D(objects[idx].p[0], objects[idx].p[7], objects[idx].p[4],idx);
+
+          self->triangle3D(objects[idx].p[1], objects[idx].p[4], objects[idx].p[5],idx);//右
+          self->triangle3D(objects[idx].p[1], objects[idx].p[0], objects[idx].p[4],idx);
+
+          // 前２面
+          self->triangle3D(objects[idx].p[3], objects[idx].p[6], objects[idx].p[7],idx);
+          self->triangle3D(objects[idx].p[3], objects[idx].p[2], objects[idx].p[6],idx);
+
+          self->triangle3D(objects[idx].p[2], objects[idx].p[5], objects[idx].p[6],idx);//右
+          self->triangle3D(objects[idx].p[2], objects[idx].p[1], objects[idx].p[5],idx);
+      }
+    }
+  return 0;
 }
+
 
 int runLuaGame::run(int _remainTime){
 

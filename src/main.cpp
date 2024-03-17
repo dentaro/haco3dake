@@ -24,7 +24,6 @@
 #include <LovyanGFX_DentaroUI.hpp>
 #include <map>
 
-
 bool enemyF = false;
 uint8_t enemyX = 0;
 uint8_t enemyY = 0;
@@ -1079,7 +1078,6 @@ void loop()
       keychar = NULL;
       if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
         pressedBtnID = -1;//リセット   
-
   }
   
   keychar = keyboard.read();
@@ -1223,13 +1221,22 @@ void loop()
     editor.editorRefreshScreen(tft);
 
     float codeunit = 128.0/float(editor.getNumRows());
-    float codelen = codeunit*10;
+    float codelen = codeunit * 14;//14は表示行数
+    // int codelen = int(codelen_f + 0.5); // 四捨五入して整数に変換する
     
     float curpos = codeunit*editor.getCy();
-    float codepos = codeunit*(editor.getCy() - editor.getScreenRow());
+    float codepos = codeunit * (editor.getCy() - editor.getScreenRow());
+    // int codepos = int(codepos_f + 0.5); // 四捨五入して整数に変換する
     
     tft.fillRect(156,0, 4,128, HACO3_C5);//コードの全体の長さを表示
     tft.fillRect(156,int(codepos), 4,codelen, HACO3_C6);//コードの位置と範囲を表示
+
+    if(curpos>=int(codepos)+codelen)//すこしはみ出たら表示コード内に入れる
+    {
+      if(codeunit>=1)curpos = int(codepos)+codelen - codeunit;
+      else curpos = int(codepos)+codelen - 1;
+    }
+
     if(codeunit>=1){tft.fillRect(155, int(curpos), 4, codeunit, HACO3_C8);}//コードの位置と範囲を表示
     else{tft.fillRect(155, int(curpos), 4, 1, HACO3_C8);}//１ピクセル未満の時は見えなくなるので１に
     

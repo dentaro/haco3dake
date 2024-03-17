@@ -224,7 +224,7 @@ struct CameraObj {
     void hsbToRgb2(float angle, float br, int& r, int& g, int& b);
     void fillFastTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t c1);
     void line3D(const Vector3<float> v1,const Vector3<float> v2,uint16_t c1);
-    void triangle3D(const Vector3<float> v1,const Vector3<float> v2,const Vector3<float> v3);
+    void triangle3D(const Vector3<float> v1,const Vector3<float> v2,const Vector3<float> v3, int idx);
     void fill3DFastTriangle(int32_t x0, int32_t y0, int32_t z0,
                                         int32_t x1, int32_t y1, int32_t z1,
                                         int32_t x2, int32_t y2, int32_t z2,
