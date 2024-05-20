@@ -346,7 +346,7 @@ int RunHaco8Game::l_mget(lua_State* L){
   RunHaco8Game* self = (RunHaco8Game*)lua_touserdata(L, lua_upvalueindex(1));
   int celx = lua_tointeger(L, 1);
   int cely = lua_tointeger(L, 2);
-  lua_pushinteger(L, mapArray[celx][cely]);
+  lua_pushinteger(L, mapArray[cely][celx]);
   return 1;
 }
 
