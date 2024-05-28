@@ -29,6 +29,8 @@
 #define MAPW 20//読み込みマップのpixelサイズ
 #define MAPH 16//マップのpixelサイズ
 
+#define LED_NUM 8
+
 #define HPMP 1
 class BaseGame
 {

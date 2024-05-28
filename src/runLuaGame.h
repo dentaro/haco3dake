@@ -17,6 +17,13 @@
 
 #include <vector> 
 
+
+#include <chrono> // std::chrono
+#include <thread> // std::this_thread
+// #include <stdbool.h>
+
+#include "vector.h"//自作vector
+
 // #include "Speaker_Class.hpp"
 
 extern "C"{
@@ -131,6 +138,7 @@ struct CameraObj {
     lua_State* L;
     luaL_Buffer b;
     uint8_t  col[3] = {0,0,0};
+    uint8_t  col2[3] = {0,0,0};
 
     // std::deque<int> buttonState;//ボタンの個数未定
     // int touchState;//タッチボタン
@@ -166,10 +174,12 @@ struct CameraObj {
     static int l_spr(lua_State* L);
     static int l_scroll(lua_State* L);
     static int l_rmap(lua_State* L);
+    static int l_map(lua_State* L);
     static int l_pset(lua_State* L);
     static int l_pget(lua_State* L);
     static int l_cls(lua_State* L);
     static int l_color(lua_State* L);
+    static int l_print(lua_State* L);
     static int l_text(lua_State* L);
     static int l_opmode(lua_State* L);
     static int l_drawrect(lua_State* L);
@@ -195,6 +205,12 @@ struct CameraObj {
     // static int l_getip(lua_State* L);
     // static int l_iswifidebug(lua_State* L);
     // static int l_wifiserve(lua_State* L);
+    static int l_gini(lua_State* L);
+    static int l_gstat(lua_State* L);
+    static int l_go2(lua_State* L);
+
+    static int l_wait(lua_State* L);
+
     static int l_initstars(lua_State* L);
     static int l_creobj(lua_State* L);
     static int l_creobj2(lua_State* L);
@@ -209,12 +225,40 @@ struct CameraObj {
     static int l_editor(lua_State* L);
     static int l_line(lua_State* L);
     static int l_list(lua_State* L);
+    static int l_led(lua_State* L);
     // static int l_require(lua_State* L);
     // static int l_httpsget(lua_State* L);
     // static int l_httpsgetfile(lua_State* L);
     // static int l_savebmp(lua_State* L);
     static int l_reboot(lua_State* L);
     static int l_debug(lua_State* L);
+
+    static int l_fset(lua_State* L);
+    static int l_mset(lua_State* L);
+    static int l_mget(lua_State* L);
+    static int l_fget(lua_State* L);
+
+    static int l_sin(lua_State* L);
+    static int l_cos(lua_State* L);
+
+    static int l_ceil(lua_State* L);
+    static int l_rnd(lua_State* L);
+    static int l_srnd(lua_State* L);
+    static int l_sgn(lua_State* L);
+    static int l_shl(lua_State* L);
+    static int l_shr(lua_State* L);
+    static int l_flr(lua_State* L);
+    static int l_min(lua_State* L);
+    static int l_mid(lua_State* L);
+    static int l_max(lua_State* L);
+    static int l_abs(lua_State* L);
+    static int l_sqrt(lua_State* L);
+    static int l_distance(lua_State* L);
+    static int l_atan2(lua_State* L);
+    static int l_band(lua_State* L);
+    static int l_bnot(lua_State* L);
+    static int l_bor(lua_State* L);
+    static int l_bxor(lua_State* L);
 
     void fastPoint(const Vector3<float> v1, int starbrightness, int noInt);
 
