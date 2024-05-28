@@ -1,35 +1,39 @@
---  launcher
--- count = 0
--- color(12)
 count = 0
 cursor = 0
 scroll = 0
 tabCursor = 0
 showmax = 8 --ファイルの最大表示数0~
 lineheight = 13
+
+sndsw = false
 function setup()
 
 end
 
 function _init()
   -- fs = list() 
+
   fnum = list(-1)--　　-1でファイルの数を取得
 end
 
 function drawTab(x, y, w)
-  spr(x, y, 8,8,32,0,8,8) -- left
   for i = 1,w do
-    spr(x + i*8, y,8,8,40,0,8,8) -- middle
+    spr8(50, x + i*8,y-4)
+    spr8(50, x + i*8,y+4)
   end
-  spr(x + w*8 ,y,8,8,48,0,8,8) -- right
+  -- spr(x, y,8,8,32,8,8,8) -- left
+  -- for i = 1,w do
+  --   spr(x + i*8, y,8,8,40,8,8,8) -- middle
+  -- end
+  -- spr(x + w*8 ,y,8,8,48,8,8,8) -- right
 end
 
 function drawDisableTab(x, y, w)
-  spr(x, y,8,8,32,8,8,8) -- left
-  for i = 1,w do
-    spr(x + i*8, y,8,8,40,8,8,8) -- middle
-  end
-  spr(x + w*8 ,y,8,8,48,8,8,8) -- right
+  -- spr(x, y,8,8,32,8,8,8) -- left
+  -- for i = 1,w do
+  --   spr(x + i*8, y,8,8,40,8,8,8) -- middle
+  -- end
+  -- spr(x + w*8 ,y,8,8,48,8,8,8) -- right
 end
 
 -- function drawTile(x, y, w, h)
@@ -41,13 +45,14 @@ end
 -- end
 
 function drawFile()
-  drawTab(0,1,4)
+  drawTab(4,1,4)
   color(1)--textcol
   text("file", 12, 1)
 
-  drawDisableTab(40,1,4)
+  drawDisableTab(44,1,4)
   color(1)--textcol
   text("util", 52, 0)
+  
 
   color(7)--textcol
   for i = scroll, fnum do
@@ -59,17 +64,18 @@ function drawFile()
   end
 
   -- spr(0, 4 + (cursor-scroll)*lineheight+13, 8, 8, 32, 16, 8, 8)
-  drawrect(0, 4 + (cursor-scroll)*lineheight+13, 8, 8, 7)
-  spr(0, 4 + (cursor-scroll)*lineheight+13, 8, 8, 32, 16, 8, 8)
+  -- drawrect(0, 4 + (cursor-scroll)*lineheight+13, 8, 8, 7)
+  -- spr(0, 4 + (cursor-scroll)*lineheight+13, 8, 8, 32, 16, 8, 8)
+  spr8(21, 0, 4 + (cursor-scroll)*lineheight+13)
 
-  if btn(3) >= 1 then
+  if btnp(3) then
     cursor = cursor - 1
     if cursor < 0 then
       cursor = fnum
     end
   end
 
-  if btn(4) >= 1 then
+  if btnp(4) then
     cursor = cursor + 1
     if cursor > fnum then
       cursor = 0
@@ -83,28 +89,28 @@ function drawFile()
     scroll = cursor - showmax
   end
 
-  -- if btn(1) == 2 then
+  -- if btnp(1) == 2 then
   --   run(list(cursor))
   -- end
 
-  if btn(5) >= 1 then
+  if btnp(5) then
     appmode(list(cursor),1)--エディットモードで再起動
   end
 
-  if btn(6) >= 1 then
+  if btnp(6) then
     -- appmode(list(cursor),0)--アプリモードで再起動（エディタに戻るときはこっち）
     run(list(cursor))--再起動せずにアプリを起動
   end
 end
 
-utilMenu = {"reload", "wifi on", "self wifi on", "reboot", "tone on", "tone off","chat"}
+utilMenu = {"reload", "wifi on", "self wifi on", "reboot", "tone sw", "snd edit","chat"}
 
 function drawUtil()
-  drawDisableTab(0,1,4)
+  drawDisableTab(4,1,4)
   color(1)
   text("file", 12, 1)
 
-  drawTab(40,1,4)
+  drawTab(44,1,4)
   color(1)
   text("util", 52, 0)
 
@@ -113,23 +119,24 @@ function drawUtil()
     text((k - 1) .. ":" .. v, 10, 20 + 10 * (k - 1))
   end
   --fillrect(0, 20 + cursor * 10, 10, 10)
-  spr(0, 20 + cursor*10, 8, 8, 32, 16, 8, 8)
+  -- spr(0, 20 + cursor*10, 8, 8, 32, 16, 8, 8)
+  spr8(21, 0, 20 + cursor*10)
 
-  if btn(3) == 2 then
+  if btnp(3) then
     cursor = cursor - 1
     if cursor < 0 then
       cursor = #utilMenu - 1
     end
   end
 
-  if btn(4) == 2 then
+  if btnp(4) then
     cursor = cursor + 1
     if cursor >= #utilMenu then
       cursor = 0
     end
   end
 
-  if btn(6) == 2  then
+  if btnp(6) then
     if cursor == 0 then
       run("/init/main.lua")
     elseif cursor == 1 then
@@ -145,15 +152,17 @@ function drawUtil()
     elseif cursor == 3 then
       reboot()
     elseif cursor == 4 then
-     --  tone(0, 523)
-     --  tone(1, 659)
-      -- tone(2, 784)
+      if sndsw == true then
+        -- music(0,0)
+        sndsw = false
+      elseif sndsw == false then
+        -- music(0,64)
+        sndsw = true
+      end
     elseif cursor == 5 then
-      -- tone(0, 0)
-      -- tone(1, 0)
-      -- tone(2, 0)
+      appmode("/init/main.lua", 3)--サウンドエディタモードで起動
     elseif cursor == 6 then
-      appmode("/chat/main.lua", 2)--チャットモードで起動
+      -- appmode("/chat/main.lua", 2)--チャットモードで起動
     end
   end
 end
@@ -161,7 +170,7 @@ end
 function _update()
   cls(1)--bgcol
   color(1)
-  fillrect(0, 0, 160, 16)
+  fillrect(0, 0, 160, 12)
   -- color(7)
   -- if iswifidebug() then
   --   text("wifi: on", 0, 0)
@@ -170,14 +179,14 @@ function _update()
   --   text("wifi: off", 0, 0)
   -- end
 
-  if btn(1) == 2 then
+  if btnp(1) then
     tabCursor = tabCursor - 1
     if tabCursor < 0 then
       tabCursor = 1
     end
     cursor = 0
   end
-  if btn(2) == 2 then
+  if btnp(2) then
     tabCursor = tabCursor + 1
     if tabCursor > 1 then
       tabCursor = 0
