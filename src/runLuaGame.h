@@ -24,7 +24,7 @@
 
 #include "vector.h"//自作vector
 
-// #include "Speaker_Class.hpp"
+#include "Speaker_Class.hpp"
 
 extern "C"{
 #include <lua.h>
@@ -164,11 +164,14 @@ struct CameraObj {
   runLuaGame(int _gameState, String _mn);//ゲームの状態を立ち上げ時に渡す
 
     int loadSurface(File* fp, uint8_t* buf);
-    // static int l_tp(lua_State* L);
+    static int l_tp(lua_State* L);
     // static int l_tstat(lua_State* L);
     static int l_vol(lua_State* L);
     static int l_pinw(lua_State* L);
     static int l_pinr(lua_State* L);
+    static int l_sfx(lua_State* L);
+    static int l_sfxini(lua_State* L);
+    static int l_music(lua_State* L);
     static int l_tone(lua_State* L);
     static int l_spr8(lua_State* L);
     static int l_spr(lua_State* L);

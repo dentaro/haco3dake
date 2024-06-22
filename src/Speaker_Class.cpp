@@ -190,7 +190,7 @@
     auto self = (Speaker_Class*)args;
     const i2s_port_t i2s_port = self->_cfg.i2s_port;
     const bool out_stereo = self->_cfg.stereo;
-    const size_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
+    const uint8_t dma_buf_len = self->_cfg.dma_buf_len & ~1;
 
 #if defined (SDL_h_)
 
@@ -319,7 +319,7 @@
         if (self->_cfg.use_dac && dac_offset)
         { // Gradual transition of DAC output to 0;
           flg_i2s_started = spk_i2s_mute;
-          size_t idx = 0;
+          uint8_t idx = 0;
           do
           {
             auto tmp = (uint32_t)((1.0f + cosf(idx * M_PI / dma_buf_len)) * (dac_offset >> 1));
@@ -336,7 +336,7 @@
         // バッファ全てゼロになるまで出力を繰返す;
         memset(sound_buf32, 0, dma_buf_len * sizeof(uint32_t));
         // DAC使用時は長めに設定する
-        size_t retry = (self->_cfg.dma_buf_count << self->_cfg.use_dac) + 1;
+        uint8_t retry = (self->_cfg.dma_buf_count << self->_cfg.use_dac) + 1;
         while (!ulTaskNotifyTake( pdTRUE, 0 ) && --retry)
         {
           size_t write_bytes;
@@ -389,7 +389,7 @@
 
         if (self->_cfg.use_dac && self->_cfg.dac_zero_level != 0)
         {
-          size_t idx = 0;
+          uint8_t idx = 0;
           do
           {
             auto tmp = (uint32_t)((1.0f - cosf(idx * M_PI / dma_buf_len)) * (dac_offset >> 1));
@@ -405,19 +405,19 @@
 
       float volume = magnification * (self->_master_volume * self->_master_volume);
 
-      for (size_t ch = 0; ch < sound_channel_max; ++ch)
+      for (uint8_t ch = 0; ch < sound_channel_max; ++ch)
       {
         if (0 == (self->_play_channel_bits.load() & (1 << ch))) { continue; }
         flg_nodata = false;
 
         auto ch_info = &(self->_ch_info[ch]);
         int ch_diff = ch_info->diff;
-        size_t ch_index = ch_info->index;
+        uint8_t ch_index = ch_info->index;
 
         wav_info_t* current_wav = &(ch_info->wavinfo[!ch_info->flip]);
         wav_info_t* next_wav    = &(ch_info->wavinfo[ ch_info->flip]);
 
-        size_t idx = 0;
+        uint8_t idx = 0;
 
         if (current_wav->repeat == 0 || next_wav->stop_current)
         {
@@ -581,7 +581,7 @@ label_continue_sample:
   /// DAC出力が低いほどノイズ音が減るため、なるべくDAC出力を下げてノイズを低減することを目的とする。;
           const bool zero_bias = (self->_cfg.dac_zero_level == 0);
           bool biasing = zero_bias;
-          size_t idx = 0;
+          uint8_t idx = 0;
           do
           {
             int32_t v1 = sound_buf32[  idx] >> 8;
@@ -618,7 +618,7 @@ label_continue_sample:
   /// 出力はモノラル限定だが、I2Sへはステレオ扱いで出力する。;
   /// (I2Sをモノラル設定にした場合は同じデータが２チャンネル分送信されてしまうため、敢えてステレオ扱いとしている);
           int32_t tmp = (uint16_t)surplus16;
-          size_t idx = 0;
+          uint8_t idx = 0;
           do
           {
             int32_t v = sound_buf32[idx] >> 8;
@@ -639,7 +639,7 @@ label_continue_sample:
         }
         else
         {
-          size_t idx = 0;
+          uint8_t idx = 0;
           do
           {
             int32_t v1 = sound_buf32[idx] >> 8;
@@ -694,7 +694,7 @@ label_continue_sample:
     res = (ESP_OK == _setup_i2s()) && res;
     if (res)
     {
-      size_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
+      uint8_t stack_size = 1280 + (_cfg.dma_buf_len * sizeof(uint32_t));
       _task_running = true;
 #if defined (SDL_h_)
       _task_handle = SDL_CreateThread((SDL_ThreadFunction)spk_task, "spk_task", this);
@@ -739,7 +739,7 @@ label_continue_sample:
   {
     wav_info_t tmp;
     tmp.stop_current = 1;
-    for (size_t ch = 0; ch < sound_channel_max; ++ch)
+    for (uint8_t ch = 0; ch < sound_channel_max; ++ch)
     {
       auto chinfo = &_ch_info[ch];
       chinfo->wavinfo[chinfo->flip] = tmp;
@@ -748,7 +748,7 @@ label_continue_sample:
 
   void Speaker_Class::stop(uint8_t ch)
   {
-    if ((size_t)ch >= sound_channel_max)
+    if ((uint8_t)ch >= sound_channel_max)
     {
       stop();
     }
@@ -770,7 +770,7 @@ label_continue_sample:
     repeat = 0;
   }
 
-  bool Speaker_Class::_set_next_wav(size_t ch, const wav_info_t& wav)
+  bool Speaker_Class::_set_next_wav(uint8_t ch, const wav_info_t& wav)
   {
     auto chinfo = &_ch_info[ch];
     uint8_t chmask = 1 << ch;
@@ -795,7 +795,7 @@ label_continue_sample:
     return true;
   }
 
-bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
+bool Speaker_Class::_play_raw(const void* data, uint8_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index)
 {
     // 初期化が行われていない場合やタスクが有効でない場合、戻る
     if (!begin() || (_task_handle == nullptr)) { return true; }
@@ -803,13 +803,13 @@ bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit
     // 音声データの長さが0か、データが無効な場合、戻る
     if (array_len == 0 || data == nullptr) { return true; }
 
-    size_t ch = (size_t)channel;
+    uint8_t ch = (uint8_t)channel;
 
     // チャンネルが最大値を超えている場合、有効なチャンネルを探す
     if (ch >= sound_channel_max)
     {
         // 再生中のチャンネルを取得
-        size_t bits = _play_channel_bits.load();
+        uint8_t bits = _play_channel_bits.load();
         for (ch = sound_channel_max - 1; ch < sound_channel_max; --ch)
         {
             if (0 == ((bits >> ch) & 1)) { break; }
@@ -833,7 +833,7 @@ bool Speaker_Class::_play_raw(const void* data, size_t array_len, bool flg_16bit
     return _set_next_wav(ch, info);
 }
 
-  bool Speaker_Class::playWav(const uint8_t* wav_data, size_t data_len, uint32_t repeat, int channel, bool stop_current_sound)
+  bool Speaker_Class::playWav(const uint8_t* wav_data, uint8_t data_len, uint32_t repeat, int channel, bool stop_current_sound)
   {
     struct __attribute__((packed)) wav_header_t
     {

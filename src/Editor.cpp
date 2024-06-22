@@ -759,12 +759,12 @@ void Editor::getCursorConfig(String _wrfile) {
             E.rx = 0;//configファイルが壊れていても強制的に値を入れて立ち上げる
           }
         }
-  Serial.print("GET");
-  Serial.print(E.cx);
-  Serial.print(":");
-  Serial.print(E.cy);
-  Serial.print(":");
-  Serial.println(E.rx);
+  //Serial.print("GET");
+  //Serial.print(E.cx);
+  //Serial.print(":");
+  //Serial.print(E.cy);
+  //Serial.print(":");
+  //Serial.println(E.rx);
     }
   }
   fr.close();
@@ -780,12 +780,12 @@ void Editor::setCursorConfig(int _cx, int _cy, int _rx) {
     E.cx, E.cy, E.rx
   );
 
-  Serial.print("SET");
-  Serial.print(E.cx);
-  Serial.print(":");
-  Serial.print(E.cy);
-  Serial.print(":");
-  Serial.println(E.rx);
+  //Serial.print("SET");
+  //Serial.print(E.cx);
+  //Serial.print(":");
+  //Serial.print(E.cy);
+  //Serial.print(":");
+  //Serial.println(E.rx);
   
   String writeStr = numStr;  // 書き込み文字列を設定
   File fw = SPIFFS.open("/init/param/editor.txt", "w"); // ファイルを書き込みモードで開く
@@ -801,12 +801,12 @@ void Editor::setCursorConfig() {
     E.cx, E.cy, E.rx
   );
 
-  Serial.print("SET");
-  Serial.print(E.cx);
-  Serial.print(":");
-  Serial.print(E.cy);
-  Serial.print(":");
-  Serial.println(E.rx);
+  //Serial.print("SET");
+  //Serial.print(E.cx);
+  //Serial.print(":");
+  //Serial.print(E.cy);
+  //Serial.print(":");
+  //Serial.println(E.rx);
   
   String writeStr = numStr;  // 書き込み文字列を設定
   File fw = SPIFFS.open("/init/param/editor.txt", "w"); // ファイルを書き込みモードで開く
@@ -870,7 +870,7 @@ void Editor::editorOpen(fs::FS &fs, const char *filename) {
   if (fs.exists(filename)) {
     File file = fs.open(filename, FILE_READ);
     if (!file) {
-      Serial.println("Failed to open file for reading");
+      //Serial.println("Failed to open file for reading");
       return;
     }
 
@@ -939,17 +939,17 @@ void Editor::editorSave(fs::FS &fs) {
 }
 
 void Editor::writeFile(fs::FS &fs, const char * path, const char * message){
-    Serial.printf("Writing file: %s\n", path);
+    //Serial.printf("Writing file: %s\n", path);
 
     File file = fs.open(path, FILE_WRITE);
     if(!file){
-        Serial.println("Failed to open file for writing");
+        //Serial.println("Failed to open file for writing");
         return;
     }
     if(file.print(message)){
-        Serial.println("File written");
+        //Serial.println("File written");
     } else {
-        Serial.println("Write failed");
+        //Serial.println("Write failed");
     }
     file.close();
 }

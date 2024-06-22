@@ -1,4 +1,4 @@
-
+#include <Arduino.h>
 #include "baseGame.h"
 
 #include <string> // 必要に応じて追加
@@ -11,18 +11,222 @@
 #include "runLuaGame.h"
 #include <sstream>
 
-#include <Arduino.h>
 #include <FS.h>
 #include "SPIFFS.h"
 // #include "Tunes.h"
 #include "Editor.h"
-#include <PS2Keyboard.h>
+// #include <PS2Keyboard.h>
+#include <KbdRptParser.h>
+
 // #include "Speaker_Class.hpp"
 // #include "Channel.hpp"
 // #include <esp_now.h>
 // #include <WiFi.h>
 #include <LovyanGFX_DentaroUI.hpp>
 #include <map>
+#include "Channel.hpp"
+
+#include <hidboot.h>
+#include <usbhub.h>
+
+// Satisfy the IDE, which needs to see the include statment in the ino too.
+#ifdef dobogusinclude
+#include <spi4teensy3.h>
+#endif
+#include <SPI.h>
+
+#define KEYBOARD_DATA 22//32
+#define KEYBOARD_CLK  19//33
+
+// PS2Keyboard keyboard;
+KbdRptParser keyboard;
+
+uint8_t charSpritex = 0;
+uint8_t charSpritey = 0;
+int pressedBtnID = -1;//この値をタッチボタン、物理ボタンの両方から操作してbtnStateを間接的に操作している
+// TaskHandle_t taskHandle[2];
+//キーボード関連
+Editor editor;
+
+char keychar;//キーボードから毎フレーム入ってくる文字
+
+bool isSoftLED[LED_NUM];
+
+int gameState = 0;
+
+Speaker_Class* speaker;
+uint64_t frame = 0;
+
+int isEditMode;
+bool firstBootF = true;
+bool difffileF = false;//前と違うファイルを開こうとしたときに立つフラグ
+
+std::deque<int> buttonState;//ボタンの個数未定
+// int buttonState[9];
+uint8_t sprno;
+uint8_t repeatnum;
+// std::vector<std::vector<uint8_t>> rowData(16);
+
+bool useMouseF = false;
+
+int mp[3] = {0,0,0};
+
+class MouseRptParser : public MouseReportParser
+{
+protected:
+	void OnMouseMove	(MOUSEINFO *mi);
+	void OnLeftButtonUp	(MOUSEINFO *mi);
+	void OnLeftButtonDown	(MOUSEINFO *mi);
+	void OnRightButtonUp	(MOUSEINFO *mi);
+	void OnRightButtonDown	(MOUSEINFO *mi);
+	void OnMiddleButtonUp	(MOUSEINFO *mi);
+	void OnMiddleButtonDown	(MOUSEINFO *mi);
+};
+
+void MouseRptParser::OnMouseMove(MOUSEINFO *mi)
+{
+    // Serial.print("dx=");
+    // Serial.print(mi->dX, DEC);
+    // Serial.print(" dy=");
+    // Serial.println(mi->dY, DEC);
+
+    // mp[0] = ((mp[0] + mi->dX)+160)%160;
+    // mp[1] = ((mp[1] + mi->dY)+128)%128;
+    
+    mp[0] = mp[0] + mi->dX;
+    mp[1] = mp[1] + mi->dY;
+    if(mp[0]>160)mp[0]=160;
+    if(mp[0]<0)  mp[0]=0;
+    if(mp[1]>128)mp[1]=128;
+    if(mp[1]<0)  mp[1]=0;
+
+    // mp[0] = (mp[0]+160)%160;
+    // mp[1] = (mp[1]+128)%128;
+
+    // Serial.print("mx=");
+    // Serial.print(mp[0]);
+    // Serial.print(" my=");
+    // Serial.println(mp[1]);
+
+    // setMousePos(mi->dX,mi->dY);
+};
+void MouseRptParser::OnLeftButtonUp	(MOUSEINFO *mi)
+{
+    //Serial.println("L Butt Up");
+    mp[2] = 0;
+};
+void MouseRptParser::OnLeftButtonDown	(MOUSEINFO *mi)
+{
+    //Serial.println("L Butt Dn");
+    mp[2] = 1;
+};
+void MouseRptParser::OnRightButtonUp	(MOUSEINFO *mi)
+{
+    //Serial.println("R Butt Up");
+    mp[2] = 0;
+};
+void MouseRptParser::OnRightButtonDown	(MOUSEINFO *mi)
+{
+    //Serial.println("R Butt Dn");
+    mp[2] = 2;
+};
+void MouseRptParser::OnMiddleButtonUp	(MOUSEINFO *mi)
+{
+    //Serial.println("M Butt Up");
+    mp[2] = 0;
+};
+void MouseRptParser::OnMiddleButtonDown	(MOUSEINFO *mi)
+{
+    //Serial.println("M Butt Dn");
+    mp[2] = 3;
+};
+
+USB     Usb;
+USBHub     Hub(&Usb);
+HIDBoot<USB_HID_PROTOCOL_MOUSE>    HidMouse(&Usb);
+
+MouseRptParser                               Prs;
+
+void mouseSetup()
+{
+
+  keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
+
+    Serial.begin( 115200 );
+#if !defined(__MIPSEL__)
+    while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
+#endif
+    //Serial.println("Start");
+
+    if (Usb.Init() == -1)
+        Serial.println("OSC did not start.");
+
+    delay( 200 );
+
+    HidMouse.SetReportParser(0, &Prs);
+}
+
+// void mouseloop()
+// {
+//   Usb.Task();
+// }
+
+uint32_t cnt = ~0;
+int fps=60;//デフォルト
+bool btnpF = false;
+bool prebtnpF = false;
+int btnptick = 0;
+int prebtnptick = 0;
+int btnpms = 0;
+bool textMoveF = false;
+
+unsigned long startTime = millis();
+
+uint32_t remainTime;
+uint32_t currentTime;
+uint32_t elapsedTime;
+uint32_t currentTime2;
+uint32_t targettime2;
+
+size_t patternID = 0;
+Channel* channels = new Channel();
+
+int soundNo = -1;
+float soundSpeed = 1.0;
+int musicNo = -1;
+bool musicflag = false;
+bool sfxflag = false;
+bool toneflag = false;
+bool firstLoopF = true;
+
+
+uint8_t sfxlistNo = 0;
+uint8_t sfxnos[8] ={0,1,2,3,4,5,6,7};
+
+uint8_t loopStart = 0;
+uint8_t loopEnd = 63;
+uint8_t looplen = (loopEnd - loopStart)+1;
+float bpm = 120;
+
+// // //音関連
+uint8_t buffAreaNo = 0;
+uint8_t gEfectNo = 0;
+uint8_t effectVal = 0.0f;
+uint8_t toneTickNo = 0;
+uint8_t sfxTickNo = 0;
+uint8_t instrument = 0;
+uint8_t targetChannelNo = 0;//描画編集する効果音番号を設定（sfx(n)のnで効果音番号を指定することで作った効果音がなる）
+uint8_t tickTime = 125;//125ms*8chはbpm60
+uint8_t tickSpeed = 5;//連動してない
+
+uint8_t sfxNo;
+uint8_t wavNo;
+uint8_t sfxChNo;
+uint8_t sfxVol;
+float sfxspeed;
+uint8_t sfxmusicNo;
+uint8_t masterVol;
+uint8_t toolNo;
 
 int waittime = 0;
 
@@ -40,10 +244,8 @@ static int menu_w = 120;
 static int menu_h = 30;
 static int menu_padding = 36;
 
-#define KEYBOARD_DATA 22//32
-#define KEYBOARD_CLK  19//33
 
-#define SPEAKER_PIN 25
+// #define SPEAKER_PIN 25
 
 #define MAPWH 16//マップのpixelサイズ
 #define BUF_PNG_NUM 0
@@ -58,25 +260,6 @@ static int menu_padding = 36;
 #define TFT_EDIT_MODE 1
 // #define TFT_WIFI_MODE 2
 
-bool isSoftLED[LED_NUM];
-
-int gameState = 0;
-
-PS2Keyboard keyboard;
-
-// Speaker_Class* speaker;
-
-uint64_t frame = 0;
-
-int isEditMode;
-bool firstBootF = true;
-bool difffileF = false;//前と違うファイルを開こうとしたときに立つフラグ
-
-std::deque<int> buttonState;//ボタンの個数未定
-// int buttonState[9];
-uint8_t sprno;
-uint8_t repeatnum;
-// std::vector<std::vector<uint8_t>> rowData(16);
 
 int gWx;
 int gWy;
@@ -131,11 +314,7 @@ enum struct FileType {
   OTHER
 };
 
-// TaskHandle_t taskHandle[2];
-//キーボード関連
-Editor editor;
 
-int keychar;//キーボードから毎フレーム入ってくる文字
 
 //esp-idfのライブラリを使う！
 //https://qiita.com/norippy_i/items/0ed46e06427a1d574625
@@ -159,9 +338,6 @@ uint8_t colValR = 0;
 uint8_t colValG = 0;
 uint8_t colValB = 0;
 
-uint8_t charSpritex = 0;
-uint8_t charSpritey = 0;
-int pressedBtnID = -1;//この値をタッチボタン、物理ボタンの両方から操作してbtnStateを間接的に操作している
 
 // esp_now_peer_info_t slave;
 
@@ -238,13 +414,6 @@ char buf[MAX_CHAR];
 int mode = 0;//記号モード //0はrun 1はexit
 // int gameState = 0;
 String appNameStr = "init";
-int soundNo = -1;
-float soundSpeed = 1.0;
-int musicNo = -1;
-bool musicflag = false;
-bool sfxflag = false;
-bool toneflag = false;
-bool firstLoopF = true;
 
 float sliderval[2] = {0,0};
 bool optionuiflag = false;
@@ -269,32 +438,6 @@ int ytileNo = 12909;
 LGFX_Sprite sprref;
 String oldKeys[BUF_PNG_NUM];
 
-
-void LEDTask(void *pvParameters) {
-    while (true) {
-      
-      // digitalWrite(OUTPIN_0, isSoftLED[0]);
-      // if(isSoftLED[0]==true){
-      //   digitalWrite(OUTPIN_0, HIGH);
-      // }else{
-      //   digitalWrite(OUTPIN_0, LOW);
-      // }
-          // 何らかの条件が満たされるまで待機
-          // for(int n=0; n<LED_NUM; n++)
-          // {
-          //   if(isSoftLED[n]==true){
-          //     digitalWrite(OUTPIN_0, HIGH);
-          //   }else{
-          //     digitalWrite(OUTPIN_0, LOW);
-          //   }
-          // }
-          delay(1);
-        }
-
-        // 他の処理や適切な待機時間をここに追加
-        // delay(10);
-}
-
 int vol_value; //analog値を代入する変数を定義
 int statebtn_value; //analog値を代入する変数を定義
 int jsx_value; //analog値を代入する変数を定義
@@ -310,7 +453,6 @@ Vector2<int> getSign(int dirno) {
         return {int(dx), int(dy)};
     }
 }
-
 
 uint16_t gethaco3Col(uint8_t haco3ColNo) {
     uint16_t result = ((static_cast<uint16_t>(clist2[haco3ColNo][0]) >> 3) << 11) |
@@ -402,11 +544,11 @@ std::vector<String> allKeys;
 std::vector<String> preallKeys;
 
 void printDownloadKeys() {
-  Serial.println("Download Keys:");
+  //Serial.println("Download Keys:");
   for (const auto& key : downloadKeys) {
-      Serial.print(key);
+      //Serial.print(key);
   }
-  Serial.println("");
+  // Serial.println("");
 }
 
 void reboot()
@@ -530,20 +672,20 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
 }
 
 void deleteFile(fs::FS &fs, const char * path){
-   Serial.print("Deleting file: ");
-   Serial.println(path);
-   if(fs.remove(path)) Serial.print("− file deleted\n\r");
-   else { Serial.print("− delete failed\n\r"); }
+   //Serial.print("Deleting file: ");
+   //Serial.println(path);
+  //  if(fs.remove(path)) {Serial.print("− file deleted\n\r");}
+  //  else {Serial.print("− delete failed\n\r"); }
 }
 
 void listDir(fs::FS &fs){
    File root = fs.open("/");
    File file = root.openNextFile();
    while(file){
-      Serial.print("  FILE: ");
-      Serial.print(file.name());
-      Serial.print("\tSIZE: ");
-      Serial.print(file.size());
+      //Serial.print("  FILE: ");
+      //Serial.print(file.name());
+      //Serial.print("\tSIZE: ");
+      //Serial.print(file.size());
       file = root.openNextFile();
    }
 }
@@ -616,7 +758,7 @@ void getOpenConfig()
             val = line.substring(commaIndex + 1, nextCommaIndex);
             if(val.toInt() != NULL){
               isEditMode = val.toInt();
-              Serial.print("editmode[");Serial.print(isEditMode);Serial.println("]");
+              //Serial.print("editmode[");Serial.print(isEditMode);Serial.println("]");
             }else{
               isEditMode = 0;//configファイルが壊れていても強制的に値を入れて立ち上げる
             }
@@ -625,8 +767,8 @@ void getOpenConfig()
   }
   fr.close();
 
-  Serial.print(appfileName.c_str());
-  Serial.println("<---");
+  //Serial.print(appfileName.c_str());
+  //Serial.println("<---");
 
   string str1 = appfileName.c_str();
   int i=0;
@@ -764,29 +906,6 @@ using namespace std;
 #include <sstream>
 #include <cmath>
 
-// vector<string> split(string& input, char delimiter)
-// {
-//     istringstream stream(input);
-//     string field;
-//     vector<string> result;
-//     while (getline(stream, field, delimiter)) {
-//         result.push_back(field);
-//     }
-//     return result;
-// }
-
-// void setTFTedit(int _iseditmode){
-
-//     tft.setPsram( false );//DMA利用のためPSRAMは切る
-//     tft.createSprite( TFT_WIDTH, TFT_HEIGHT );//PSRAMを使わないギリギリ
-//     tft.startWrite();//CSアサート開始
-
-// }
-
-// int btn(int btnno){
-//   return buttonState[btnno];//ボタンの個数未定
-// }
-
 void reboot(String _fileName, uint8_t _isEditMode)
 {
   setOpenConfig(_fileName, _isEditMode);
@@ -905,8 +1024,8 @@ uint8_t readpixel(int i, int j)
 
 static void tone_up(bool holding)
 {
-  static int tone_hz;
-  if (!holding) { tone_hz = 100; }
+  // static int tone_hz;
+  // if (!holding) { tone_hz = 100; }
   // speaker->tone(++tone_hz, 1000, 1);
 }
 
@@ -964,6 +1083,107 @@ struct menu_item_t
 // };
 // const uint8_t menu_count = sizeof(menus) / sizeof(menus[0]);
 
+void speakersetup(){
+
+  
+  // setToneChannel(0);
+  // tone(SPEAKER_PIN,2000,100);
+  // noTone(SPEAKER_PIN);
+  
+  // tone(SPEAKER_PIN,1000,100);
+  // noTone(SPEAKER_PIN);
+
+  // begin(cfg);
+  // { /// I2S Custom configurations are available if you desire.
+  //   auto spk_cfg = speaker->config();
+
+  //   if (spk_cfg.use_dac || spk_cfg.buzzer)
+  //   {
+  //   /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
+  //     spk_cfg.sample_rate = 64000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
+  //   }
+
+  //   speaker->config(spk_cfg);
+  // }
+  
+
+  // speaker->begin();
+
+  // //  The setVolume function can be set the master volume in the range of 0-255. (default : 64)
+  // speaker->setVolume(255);
+
+  // /// The setAllChannelVolume function can be set the all virtual channel volume in the range of 0-255. (default : 255)
+  // speaker->setAllChannelVolume(255);
+
+  // /// The setChannelVolume function can be set the specified virtual channel volume in the range of 0-255. (default : 255)
+  // speaker->setChannelVolume(0, 255);
+
+  // /// play do Hz tone sound, 100 msec. 
+  // speaker->tone(2000, 100,1);
+
+  // delay(100);
+
+  // /// play mi Hz tone sound, 100 msec. 
+  // speaker->tone(1000, 100,2);
+
+  // delay(100);
+
+  
+  // // /// stop output sound.
+  // speaker->stop();
+
+  // delay(500);
+
+  // // speaker->playRaw( wav_unsigned_8bit_click, sizeof(wav_unsigned_8bit_click) / sizeof(wav_unsigned_8bit_click[0]), 44100, false);
+
+  // while (speaker->isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  // The 2nd argument of the tone function can be used to specify the output time (milliseconds).
+  // speaker->tone(440, 1000);  // 440Hz sound  output for 1 seconds.
+
+  // while (speaker->isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  // speaker->setVolume(0);
+  // speaker->tone(880);  // tone 880Hz sound output. (Keeps output until it stops.)
+  // for (int i = 0; i <= 151; i++)
+  // {
+  //   speaker->setVolume(i); // Volume can be changed during sound output.
+  //   delay(25);
+  // }
+  // speaker->stop();  // stop sound output.
+
+  // delay(500);
+
+  // //---------------------------------------------
+  
+
+  // The tone function can specify a virtual channel number as its 3rd argument.
+  // If the tone function is used on the same channel number, the previous tone will be stopped and a new tone will be played.
+  // speaker->tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
+  // delay(200);
+  // speaker->tone(329.628, 1000, 1);  // tone 329.628Hz  output for 1 seconds, use channel 1
+  // delay(200);
+  // speaker->tone(391.995, 1000, 1);  // tone 391.995Hz  output for 1 seconds, use channel 1
+
+  // while (speaker->isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+
+  // // By specifying different channels, multiple sounds can be output simultaneously.
+  // speaker->tone(261.626, 1000, 1);  // tone 261.626Hz  output for 1 seconds, use channel 1
+  // delay(200);
+  // speaker->tone(329.628, 1000, 2);  // tone 329.628Hz  output for 1 seconds, use channel 2
+  // delay(200);
+  // speaker->tone(391.995, 1000, 3);  // tone 391.995Hz  output for 1 seconds, use channel 3
+
+  // while (speaker->isPlaying()) { delay(1); } // Wait for the output to finish.
+
+  // delay(500);
+}
 uint8_t cursor_index = 0;
 
 
@@ -1012,29 +1232,451 @@ void ledUpdate(){
   digitalWrite(OUTPIN_0, isSoftLED[0]);//物理LED
 }
 
+TaskHandle_t taskHandle[3];
+// SemaphoreHandle_t syncSemaphore;
+QueueHandle_t keyQueue;
+SemaphoreHandle_t nextFrameSemaphore;
+size_t tick = 0;
+
+size_t patternNo = 0;//0~63
+size_t _octave = 4;// (124 - ui.getPos().y)>>2 / 12 + 4;
+size_t _pitch = 0;
+size_t _volume = 0;
+size_t addTones[8];
+
+bool createChannels()
+{
+
+String line;
+int j = 0;
+
+// パターンファイルを読み込む
+File fr = SPIFFS.open("/init/sound/patterns.csv", "r");
+if (!fr)
+{
+  //Serial.println("Failed to open patterns.csv");
+  return true; // とりあえず進む
+}
+
+j = 0;
+while (fr.available()) // 64行だけ読み込む
+{
+  line = fr.readStringUntil('\n'); // 64行文のパターン（小節）があります
+  line.trim();                      // 空白を削除
+
+  if (!line.isEmpty())
+  {
+    int commaIndex = line.indexOf(',');
+    if (commaIndex != -1)
+    {
+      String val = line.substring(0, commaIndex);
+      addTones[0] = val.toInt();
+
+      for (int i = 1; i < 8; i++)
+      {
+        int nextCommaIndex = line.indexOf(',', commaIndex + 1);
+        if (nextCommaIndex != -1)
+        {
+          val = line.substring(commaIndex + 1, nextCommaIndex);
+          addTones[i] = val.toInt();
+          commaIndex = nextCommaIndex;
+        }
+        else
+        {
+          // Handle the case where there is no trailing comma
+          val = line.substring(commaIndex + 1);
+          addTones[i] = val.toInt();
+          break; // Exit the loop since we reached the end of the line
+        }
+      }
+
+      for(size_t n=0; n<CHANNEL_NUM; n++){
+        channels->setPatterns(j, n, addTones[n]);
+      }
+      
+      j++;
+    }
+  }
+}
+fr.close();
+  //すべてが終わったらtrueを返す
+  return true;
+}
+
+bool readTones(size_t _patternNo, size_t buffAreaNo)
+{
+  String line;
+  int j = 0;
+
+  // トーンファイルを読み込む
+  for (int chno = 0; chno < CHANNEL_NUM; chno++)
+    {
+    j = 0;
+    patternID = channels->getPatternID( _patternNo, chno);
+    File fr = SPIFFS.open("/init/sound/pattern/"+String(patternID)+".csv", "r");
+    if (!fr)
+    {
+      //Serial.println("Failed to open tones.csv");
+      return true;//とりあえず進む
+    }
+    while (fr.available())
+    {
+      line = fr.readStringUntil('\n');
+      // line.trim(); // 空白を削除
+      if (!line.isEmpty())
+      {
+        int commaIndex = line.indexOf(',');
+        if (commaIndex != -1)
+        {
+          String val = line.substring(0, commaIndex);
+
+          for (int i = 0; i < 8; i++)
+          {
+            int nextCommaIndex = line.indexOf(',', commaIndex + 1);
+            if (nextCommaIndex != -1)
+            {
+              val = line.substring(commaIndex + 1, nextCommaIndex);
+              addTones[i] = val.toInt();
+              commaIndex = nextCommaIndex;
+            }
+          }
+
+          channels->setTones(
+              1,
+              addTones[0], addTones[1],
+              addTones[2], addTones[3],
+              addTones[4], addTones[5],
+              addTones[6], addTones[7], j, chno, buffAreaNo);
+          j++;
+        }
+      }
+    }
+    fr.close();
+  }
+
+  //すべてが終わったらtrueを返す
+  return true;
+}
+
+// uint8_t sfxlistNo = 0;
+// uint8_t sfxnos[8] ={0,1,2,3,4,5,6,7};
+void readsfxlist() {
+  // 読み込む効果音を外部ファイルを使い指定する
+  File fr = SPIFFS.open("/init/sound/sfxes/sfxlist"+String(sfxlistNo)+".txt", "r");
+  String line;
+  int index = 0; // インデックスを追加
+  while (fr.available()) {
+    line = fr.readStringUntil('\n');
+    if (!line.isEmpty()) {
+      int commaIndex = line.indexOf(',');
+      String val = line.substring(0, commaIndex);
+      if (val.toInt() != 0) { // 0 でないことを確認
+        sfxnos[index] = val.toInt(); // インデックスを使用して sfxnos 配列に値を代入
+        index++; // インデックスをインクリメント
+        if (index >= 8) break; // sfxnos 配列がオーバーフローしないようにする
+      }
+    }
+  }
+  fr.close();
+}
+
+bool readsfx()//行32列9のデータ
+{
+  //読み込む効果音を外部ファイルを使い指定する
+  readsfxlist();
+  // トーンファイルを読み込む
+  File fr;
+  for (int sfxno = 0; sfxno < SFX_NUM; sfxno++)
+    {
+    uint8_t addTones[32];
+    String line;
+    int j = 0;
+
+    fr = SPIFFS.open("/init/sound/sfxes/"+String(sfxnos[sfxno])+".csv", "r");
+    if (!fr)
+    {
+      //Serial.println("Failed to open tones.csv");
+      return true;//とりあえず進む
+    }
+    while (fr.available())
+    {
+      line = fr.readStringUntil('\n');
+      // line.trim(); // 空白を削除
+      if (!line.isEmpty())
+      {
+        int commaIndex = line.indexOf(',');
+        if (commaIndex != -1)
+        {
+          String val = line.substring(0, commaIndex);//一個目はここで読み込む
+
+          addTones[0] = val.toInt();
+          if(j==0)channels->sfxdata[sfxno][0].onoffF = addTones[0];
+          else if(j==1)channels->sfxdata[sfxno][0].instrument = addTones[0];//pitch
+          else if(j==2)channels->sfxdata[sfxno][0].pitch = addTones[0];
+          else if(j==3){
+            channels->sfxdata[sfxno][0].octave = addTones[0];
+            channels->sfxdata[sfxno][0].hz = channels->calculateFrequency(
+              channels->sfxdata[sfxno][0].pitch, 
+              channels->sfxdata[sfxno][0].octave);
+          }
+          else if(j==4)channels->sfxdata[sfxno][0].sfxno = addTones[0];
+          else if(j==5)channels->sfxdata[sfxno][0].volume = addTones[0];
+
+          for (int i = 1; i < 32; i++)
+          {
+
+            int nextCommaIndex = line.indexOf(',', commaIndex + 1);
+            if (nextCommaIndex != -1)
+            {
+              val = line.substring(commaIndex + 1, nextCommaIndex);
+              addTones[i] = val.toInt();
+              commaIndex = nextCommaIndex;
+
+              if(j==0)channels->sfxdata[sfxno][i].onoffF = addTones[i];
+              else if(j==1)channels->sfxdata[sfxno][i].instrument = addTones[i];//pitch
+              else if(j==2)channels->sfxdata[sfxno][i].pitch = addTones[i];
+              else if(j==3){
+                channels->sfxdata[sfxno][i].octave = addTones[i];
+                channels->sfxdata[sfxno][i].hz = channels->calculateFrequency(
+                  channels->sfxdata[sfxno][i].pitch, 
+                  channels->sfxdata[sfxno][i].octave);
+              }
+              else if(j==4)channels->sfxdata[sfxno][i].sfxno = addTones[i];
+              else if(j==5)channels->sfxdata[sfxno][i].volume = addTones[i];
+
+            }
+            
+          }
+          j++;
+        }
+      }
+    }
+  }
+  fr.close();
+
+  //すべてが終わったらtrueを返す
+  return true;
+}
+
+// void createChannelsTask(void *pvParameters) {
+//     while (true) {
+//             while (!createChannels()) {
+//                 delay(10);
+//             }
+//             readTones(patternNo, 0);
+//             readTones(patternNo + 1, 1);
+//             xSemaphoreGive(syncSemaphore);
+//             delay(10);
+//     }
+// }
+
+
+// void sfxTask(void *pvParameters) {
+//   while (true) {
+// if(sfxflag==true){
+//       channels->begin();
+//       channels->setVolume(masterVol); // 0-255
+
+//       for(int n=0;n < 32;n++){
+//         sfxTickNo = n;
+//         channels->sfx(sfxChNo, sfxNo, wavNo, sfxVol, sfxspeed);
+//       }
+//       channels->stop();
+
+//       if(sfxTickNo == 31){sfxflag=false;sfxTickNo=0;}
+//     }
+//         delay(1);
+//   }
+// }
+
+// void musicTask(void *pvParameters) {
+//     while (true) {
+//           // 何らかの条件が満たされるまで待機
+//         if (xSemaphoreTake(syncSemaphore, portMAX_DELAY)) {
+//             // 同期が取れたらここに入る
+//             channels->begin();
+//             // channels->setVolume(200); // 0-255
+//             // channels->setAllChannelVolume(127);
+//             // channels->note(0, tick, patternNo);
+//             // channels->note(1, tick, patternNo);
+//             // channels->note(2, tick, patternNo);
+//             // channels->note(3, tick, patternNo);
+
+//             // channels->note(4, tick, patternNo);
+//             // channels->note(5, tick, patternNo);
+//             // channels->note(6, tick, patternNo);
+//             // channels->note(7, tick, patternNo);
+//             // channels->stop();
+//             xSemaphoreGive(syncSemaphore);
+//         }
+            
+//             tick++;
+//             tick %= TONE_NUM;
+
+//             if (tick == 0) {
+//                 patternNo++;
+
+//                 if (patternNo >= PATTERN_NUM) {
+//                     patternNo = 0;
+//                 }
+//             }
+
+//             // delay(1);
+//         }
+
+//         // 他の処理や適切な待機時間をここに追加
+//         // delay(10);
+// }
+bool usbFlag = true;
+char prekeychar;
+
+void keyloop() {
+    // char keychar;
+    
+    
+    while (xQueueReceive(keyQueue, &keychar, 0) == pdTRUE) {
+
+      if(prekeychar == keychar){
+        keychar = NULL;
+      }
+      
+        if (keychar == NULL) {
+            pressedBtnID = -1;
+        } else if (keychar == PS2_ENTER) {
+            // Serial.println();
+        } else if (keychar == PS2_TAB) {
+            // pressedBtnID = 7;
+        } else if (keychar == PS2_ESC) {
+            pressedBtnID = 0;
+        } else if (keychar == PS2_PAGEDOWN) {
+            pressedBtnID = 6;
+        } else if (keychar == PS2_PAGEUP) {
+            pressedBtnID = 5;
+        } else if (keychar == PS2_LEFTARROW) {
+            pressedBtnID = 1;
+        } else if (keychar == PS2_RIGHTARROW) {
+            pressedBtnID = 2;
+        } else if (keychar == PS2_UPARROW) {
+            pressedBtnID = 3;
+        } else if (keychar == PS2_DOWNARROW) {
+            pressedBtnID = 4;
+        } else if (keychar == PS2_DELETE) {
+            editor.editorProcessKeypress(keychar, SPIFFS);
+            Serial.println("[Del]");
+        } else {
+            // 通常の文字
+            editor.editorProcessKeypress(keychar, SPIFFS);
+        }
+        // Serial.println(keychar);
+    }
+
+    
+    
+    prekeychar = keychar;
+
+    
+}
+
+void keyMonitorTask(void *pvParameters) {
+  // char keychar;
+  while (true) 
+  {
+    keychar = keyboard.read(); // 直接キーキャラクタを読み取る
+    if (keychar != -1) {
+      
+        xQueueSend(keyQueue, &keychar, portMAX_DELAY); // キー入力をキューに送信
+      
+    }
+
+    // keyboard.OnKeyUp(0,53);
+
+    // if (keyboard.released()) {
+    //   Serial.println("keyreleased");
+    // }
+
+    
+    delay(1); // 他のタスクの実行を許可
+  }
+}
+
+
+void mouseMonitorTask(void *pvParameters) {
+
+  // USB Host Shield 2.0の初期化
+  // USBHost usb;
+  
+  Usb.Init();
+
+  while (1) {
+    // USBホストの処理
+    // Usb.Task();
+    
+    // 適宜、他の処理を追加
+    delay(1);  // 適切なディレイを追加
+  }
+
+
+  // while (true) 
+  // {
+  //   // Usb.Task();
+
+  //   delay(1); // 他のタスクの実行を許可
+  // }
+}
+
+// void keySetup(){
+
+//   syncSemaphore = xSemaphoreCreateBinary();//セマフォを準備
+
+//       xTaskCreatePinnedToCore(
+//         keyTask,
+//         "keyTask",
+//         2048,////1024だと動く//1500だと非力だけど動く//2048だと動く
+//         NULL,
+//         1,
+//         &taskHandle[0],//NULL,// タスクハンドルを取得
+//         0 // タスクを実行するコア（0または1）
+//       );
+// }
 
 void setup()
 {
-  
+  Serial.begin(115200);
+
+  keyQueue = xQueueCreate(10, sizeof(char)); // キューを作成
+  // xTaskCreate(keyMonitorTask, "Key Monitor Task", 2048, NULL, 1, NULL); // キーボード監視タスクを作成
+      xTaskCreatePinnedToCore(
+        keyMonitorTask,
+        "keyMonitorTask",
+        2048,//2048だと動く
+        NULL,
+        1,
+        &taskHandle[0],//NULL,// タスクハンドルを取得
+        0 // タスクを実行するコア（0または1）
+      );
+
+
+  // xTaskCreate(keyMonitorTask, "Key Monitor Task", 2048, NULL, 1, NULL); // キーボード監視タスクを作成
+      xTaskCreatePinnedToCore(
+        mouseMonitorTask,
+        "mouseMonitorTask",
+        2048,//だと動く
+        NULL,
+        2,
+        &taskHandle[1],//NULL,// タスクハンドルを取得
+        0 // タスクを実行するコア（0または1）
+      );
 
   pinMode(OUTPIN_0, OUTPUT);
   pinMode(INPIN_0, INPUT);
   ledSetup();
 
-  // LEDTask タスクの作成
-  // xTaskCreatePinnedToCore(
-  //   LEDTask,
-  //   "LEDTask",
-  //   1024,////1024だと動く//1500だと非力だけど動く//2048だと動く
-  //   NULL,
-  //   1,
-  //   &taskHandle[0],//NULL,// タスクハンドルを取得
-  //   1 // タスクを実行するコア（0または1）
-  // );
-  
   ui.begin( screen, 16, 1);
-  Serial.begin(115200);
-  keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
+  // Serial.begin(115200);
+  mouseSetup();
+  // keySetup();
+
+  // keyboard.begin(KEYBOARD_DATA, KEYBOARD_CLK);
 
   editor.getCursorConfig("/init/param/editor.txt");//エディタカーソルの位置をよみこむ
 
@@ -1055,6 +1697,11 @@ void setup()
     }
   }
 
+  // usbSetup();
+  
+  // soundSetup();
+  // speakersetup();
+
   getOpenConfig();//最初に立ち上げるゲームのパスとモードをSPIFFSのファイルopenconfig.txtから読み込む
 
   // if(firstBootF == false){
@@ -1064,6 +1711,7 @@ void setup()
 
   // setTFTedit(TFT_RUN_MODE);
   tft.setPsram( false );//DMA利用のためPSRAMは切る
+  // tft.setColorDepth(16);//子スプライトの色深度
   tft.createSprite( TFT_WIDTH, TFT_HEIGHT );//PSRAMを使わないギリギリ
   tft.startWrite();//CSアサート開始
 
@@ -1144,6 +1792,8 @@ void setup()
     }
   }
 
+  // Usb.Task();
+
   // ウォッチドッグ停止
   disableCore0WDT();
   disableCore1WDT();  // 起動直後は有効化されていないのでエラーがでる
@@ -1154,27 +1804,19 @@ void setup()
   
 }
 
-uint32_t cnt = ~0;
-int fps=60;//デフォルト
-bool btnpF = false;
-bool prebtnpF = false;
-int btnptick = 0;
-int prebtnptick = 0;
-int btnpms = 0;
-bool textMoveF = false;
-
-unsigned long startTime = millis();
-
-// char gkey = ' ';
-uint32_t remainTime;
-uint32_t targettime;
-uint32_t currentTime;
-uint32_t elapsedTime;
-uint32_t currentTime2;
-uint32_t targettime2;
+const long usbTaskInterval = 10; // 10ms interval for Usb.Task
+unsigned long taskElapsedTime;
+unsigned long taskRemainTime;
+unsigned long taskPreviousTime = 0;
+bool flipF = true;
 
 void loop()
 {
+
+  // if (keyboard.released()) {
+    // Serial.println(keyboard.released());
+  // }
+  
   // 現在の時間を取得する
   
   currentTime = millis();
@@ -1184,57 +1826,7 @@ void loop()
   // 前フレームからの経過時間を計算する
   remainTime = (currentTime - preTime);
   preTime = currentTime;
-
-  // if(waittime>0){
-  //     while(waittime<=0){
-  //       waittime -= remainTime;
-  //     }
-  //     waittime = 0;
-  //   }
-
-  // uint32_t now = millis();
-  // uint32_t remainTime= (now - preTime);
-  // preTime = now;
-
-  if (!keyboard.available())
-  {
-      keychar = NULL;
-      if(pressedBtnID != -1){buttonState[pressedBtnID] = -1;}
-        pressedBtnID = -1;//リセット   
-  }
-  
-  keychar = keyboard.read();
-  
-         if (keychar == PS2_ENTER) {
-    // Serial.println();
-  } else if (keychar == PS2_TAB) {
-    // pressedBtnID = 7;
-  } else if (keychar == PS2_ESC) {
-    pressedBtnID = 0;
-  } else if (keychar == PS2_PAGEDOWN) {
-    pressedBtnID = 6;
-  } else if (keychar == PS2_PAGEUP) {
-    pressedBtnID = 5;
-  } else if (keychar == PS2_LEFTARROW) {
-    pressedBtnID = 1;
-  } else if (keychar == PS2_RIGHTARROW) {
-    pressedBtnID = 2;
-  } else if (keychar == PS2_UPARROW) {
-    pressedBtnID = 3;
-  } else if (keychar == PS2_DOWNARROW) {
-    pressedBtnID = 4;
-  } else if (keychar == PS2_DELETE) {
-    editor.editorProcessKeypress(keychar, SPIFFS);
-    Serial.println("[Del]");
-  } else {
-    //通常の文字
-    if(keychar != -1){
-    editor.editorProcessKeypress(keychar, SPIFFS);
-    Serial.println(keychar);
-    }
-    // Serial.println(keychar);
-  }
-
+//----------------------------
   //ボタンが押されているときだけtickがカウントされる
   int firstwaitms = 1000;
     
@@ -1285,18 +1877,14 @@ void loop()
   //btnpF//     |||||___|||||____|||||____|||||____ //一定時間ずつフラグを立てる
   //textMoveF// |____________|___|____|___|____|    //差があった時にtrueになる最初firstwaitms分はフラグたてない
 
-    if(textMoveF)//どのモードでもbtnpに反応する
-    {
-      ledUpdate();
-    }
+  if(textMoveF)//どのモードでもbtnpに反応する
+  {
+    ledUpdate();
+  }
 
-  // editor.update(tft, SPIFFS, SD, keychar);
   if(pressedBtnID != -1){
     editor.update(tft, SPIFFS, keychar);
-    
   }
-    
-  
   // if(pressedBtnID == -1){
   //   buttonState[pressedBtnID] = -1;
   // }else if(pressedBtnID>=0&&pressedBtnID<=6){//押されたものだけの値をあげる
@@ -1306,19 +1894,21 @@ void loop()
   // buttonState[pressedBtnID]++;
 
   // // // for(int i = 0; i < buttonState.size(); i ++){
-  // for(int i = 0; i < 7; i ++){
-  //   if(pressedBtnID == -1){
-  //     buttonState[i] = 0;
-  //   }else if(pressedBtnID == i){//押されたものだけの値をあげる
-  //     buttonState[i] ++;
-  //   }
-  // }
-  
-
-
+  for(int i = 0; i < 7; i ++){
+    if(pressedBtnID == -1){
+      buttonState[i] = 0;
+      
+    }else if(pressedBtnID == i){//押されたものだけの値をあげる
+      buttonState[i] ++;
+    }
+  }
 
       // 経過時間が1/30秒以上経過した場合
 if (elapsedTime >= 1000/fps||fps==-1) {
+
+  // if(pressedBtnID != -1){
+    keyloop();
+  // }
 
   if( isEditMode == TFT_RUN_MODE ){
     //ゲーム内のprint時の文字設定をしておく
@@ -1332,36 +1922,12 @@ if (elapsedTime >= 1000/fps||fps==-1) {
 
     // == game task ==
 
-    
+    mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
 
-  // if(waittime>0){
-  //   while(waittime<=0){
-  //     waittime -= remainTime;
-  //   }
-  //   waittime = 0;
-  // }
+// Serial.println(pressedBtnID);
 
-  // if(waittime==0){
-  //   mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
-  // }else if(waittime>0){
-  //   waittime -= remainTime; 
-  // }else{
-  //   waittime = 0;
-  // }
-    // if(targettime>currentTime){//現在の時間が目標時間より小さい間は
-    //   // delay(waittime);
-    //   delay(1);
-    // }else{
-    // if(targettime<=currentTime){
-      mode = game->run(remainTime);//exitは1が返ってくる　mode=１ 次のゲームを起動
-    // }
-    // else{
-
-    //   if(waittime>0){
-    //     // delayMicroseconds(waittime*1000);
-    //     targettime = currentTime + waittime;
-    //     waittime = 0;
-    //   }
+    // if(useMouseF == true){//キーイベントがない時だけtrue
+        Usb.Task();
     // }
 
     //ESCボタンで強制終了
@@ -1482,12 +2048,14 @@ if (elapsedTime >= 1000/fps||fps==-1) {
     }
 
   }
-}
 
- 
+  // xSemaphoreGive(syncSemaphore);
+}
+// Usb.Task();
 
   frame++;
   if(frame > 18446744073709551615)frame = 0;
   delay(1);
+  
   
 }

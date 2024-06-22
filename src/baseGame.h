@@ -30,6 +30,7 @@
 #define MAPH 16//マップのpixelサイズ
 
 #define LED_NUM 8
+#define SPEAKER_PIN 25
 
 #define HPMP 1
 class BaseGame

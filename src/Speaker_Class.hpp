@@ -55,10 +55,10 @@
     uint8_t magnification = 16;
 
     /// for I2S dma_buf_len (max 1024)
-    size_t dma_buf_len = 128;
+    uint8_t dma_buf_len = 128;
 
     /// for I2S dma_buf_count
-    size_t dma_buf_count = 8;
+    uint8_t dma_buf_count = 8;
 
     /// background task priority
     uint8_t task_priority = 2;
@@ -105,11 +105,11 @@
     /// now in playing or not.
     /// @param channel virtual channel number. (0~7), (default = automatically selected)
     /// @return 0=not playing / 1=playing (There's room in the queue) / 2=playing (There's no room in the queue.)
-    size_t isPlaying(uint8_t channel) const volatile { return (channel < sound_channel_max) ? ((bool)_ch_info[channel].wavinfo[0].repeat) + ((bool)_ch_info[channel].wavinfo[1].repeat) : 0; }
+    uint8_t isPlaying(uint8_t channel) const volatile { return (channel < sound_channel_max) ? ((bool)_ch_info[channel].wavinfo[0].repeat) + ((bool)_ch_info[channel].wavinfo[1].repeat) : 0; }
 
     /// Get the number of channels that are playing.
     /// @return number of channels that are playing.
-    size_t getPlayingChannels(void) const volatile { return __builtin_popcount(_play_channel_bits.load()); }
+    uint8_t getPlayingChannels(void) const volatile { return __builtin_popcount(_play_channel_bits.load()); }
 
     /// sets the output master volume of the sound.
     /// @param master_volume master volume (0~255)
@@ -121,7 +121,7 @@
 
     /// sets the output volume of the sound for the all virtual channel.
     /// @param volume channel volume (0~255)
-    void setAllChannelVolume(uint8_t volume) { for (size_t ch = 0; ch < sound_channel_max; ++ch) { _ch_info[ch].volume = volume; } }
+    void setAllChannelVolume(uint8_t volume) { for (uint8_t ch = 0; ch < sound_channel_max; ++ch) { _ch_info[ch].volume = volume; } }
 
     /// sets the output volume of the sound for the specified virtual channel.
     /// @param channel virtual channel number. (0~7)
@@ -148,7 +148,7 @@
     /// @param raw_data Single amplitude audio data. 8bit unsigned wav.
     /// @param array_len size of raw_data.
     /// @param stereo true=data is stereo / false=data is mono.
-    bool tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* raw_data, size_t array_len, bool stereo = false)
+    bool tone(float frequency, uint32_t duration, int channel, bool stop_current_sound, const uint8_t* raw_data, uint8_t array_len, bool stereo = false)
     {
       return _play_raw(raw_data, array_len, false, false, frequency * (array_len >> stereo), stereo, (duration != UINT32_MAX) ? (uint32_t)(duration * frequency / 1000) : UINT32_MAX, channel, stop_current_sound, true);
     }
@@ -169,12 +169,12 @@
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
     /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
-    bool playRaw(const int8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
+    bool playRaw(const int8_t* raw_data, uint8_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
     [[deprecated("The playRAW function has been renamed to playRaw")]]
-    bool playRAW(const int8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
+    bool playRAW(const int8_t* raw_data, uint8_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
@@ -189,12 +189,12 @@
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
     /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
-    bool playRaw(const uint8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
+    bool playRaw(const uint8_t* raw_data, uint8_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, false, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
     [[deprecated("The playRAW function has been renamed to playRaw")]]
-    bool playRAW(const uint8_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
+    bool playRAW(const uint8_t* raw_data, uint8_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, false, false, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
@@ -209,14 +209,14 @@
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
     /// @attention If you want to use the data generated at runtime, you can either have three buffers and use them in sequence, or have two buffers and use them alternately, then split them in half and call playRaw twice.
     /// @attention If noise is present in the output sounds, consider increasing the priority of the task that generates the data.
-    bool playRaw(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
+    bool playRaw(const int16_t* raw_data, uint8_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, true, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
 
     /// @deprecated "playRAW" function has been renamed to "playRaw"
     [[deprecated("The playRAW function has been renamed to playRaw")]]
-    bool playRAW(const int16_t* raw_data, size_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
+    bool playRAW(const int16_t* raw_data, uint8_t array_len, uint32_t sample_rate = 44100, bool stereo = false, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false)
     {
       return _play_raw(static_cast<const void* >(raw_data), array_len, true, true, sample_rate, stereo, repeat, channel, stop_current_sound, false);
     }
@@ -226,11 +226,11 @@
     /// @param repeat number of times played repeatedly. (default = 1)
     /// @param channel virtual channel number (If omitted, use an available channel.)
     /// @param stop_current_sound true=start a new output without waiting for the current one to finish.
-    bool playWav(const uint8_t* wav_data, size_t data_len = ~0u, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false);
+    bool playWav(const uint8_t* wav_data, uint8_t data_len = ~0u, uint32_t repeat = 1, int channel = -1, bool stop_current_sound = false);
 
   protected:
 
-    static constexpr const size_t sound_channel_max = 8;
+    static constexpr const uint8_t sound_channel_max = 8;
 
     static const uint8_t _default_tone_wav[16];
 
@@ -241,7 +241,7 @@
       volatile uint32_t repeat = 0;   /// -1 mean infinity repeat
       uint32_t sample_rate_x256 = 0;
       const void* data = nullptr;
-      size_t length = 0;
+      uint8_t length = 0;
       union
       {
         volatile uint8_t flg = 0;
@@ -260,7 +260,7 @@
     struct channel_info_t
     {
       wav_info_t wavinfo[2]; // current/next flip info.
-      size_t index = 0;
+      uint8_t index = 0;
       int diff = 0;
       volatile uint8_t volume = 255; // channel volume (not master volume)
       volatile bool flip = false;
@@ -273,8 +273,8 @@
     static void spk_task(void* args);
 
     esp_err_t _setup_i2s(void);
-    bool _play_raw(const void* wav, size_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
-    bool _set_next_wav(size_t ch, const wav_info_t& wav);
+    bool _play_raw(const void* wav, uint8_t array_len, bool flg_16bit, bool flg_signed, float sample_rate, bool flg_stereo, uint32_t repeat_count, int channel, bool stop_current_sound, bool no_clear_index);
+    bool _set_next_wav(uint8_t ch, const wav_info_t& wav);
 
     speaker_config_t _cfg;
     volatile uint8_t _master_volume = 64;
