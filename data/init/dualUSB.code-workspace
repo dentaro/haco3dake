@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"path": "../../../dualUSB"
+		},
+		{
+			"name": "FabGL",
+			"path": "../../../FabGL"
+		},
+		{
+			"name": "haco3dake",
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"array": "cpp",
+			"string": "cpp",
+			"string_view": "cpp"
+		}
+	}
+}
